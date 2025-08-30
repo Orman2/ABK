@@ -17,10 +17,10 @@ from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandl
 
 # ================= CONFIG =================
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-PUBLIC_URL = os.environ.get("PUBLIC_URL", "")  # например https://arb-bot.onrender.com
+PUBLIC_URL = os.environ.get("PUBLIC_URL", "")  # например https://arb-bot.up.railway.app
 
 if not TELEGRAM_BOT_TOKEN or not PUBLIC_URL:
-    raise RuntimeError("Set TELEGRAM_BOT_TOKEN and PUBLIC_URL environment variables!")
+    raise RuntimeError("❌ Set TELEGRAM_BOT_TOKEN and PUBLIC_URL environment variables!")
 
 WEBHOOK_PATH = f"/webhook/{TELEGRAM_BOT_TOKEN}"
 WEBHOOK_URL = PUBLIC_URL.rstrip("/") + WEBHOOK_PATH
@@ -80,9 +80,7 @@ def get_wallet(user_id: int):
 # ================= HELPERS =================
 def safe_float(x):
     try:
-        if x is None:
-            return None
-        return float(x)
+        return float(x) if x is not None else None
     except:
         return None
 
@@ -221,7 +219,7 @@ TELE_BOT_APP = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = PUBLIC_URL.rstrip("/") + "/miniapp"
     kb = [[InlineKeyboardButton("📊 Open MiniApp", web_app=WebAppInfo(url=url))]]
-    await update.message.reply_text("Welcome! Open the MiniApp to see current signals.", reply_markup=InlineKeyboardMarkup(kb))
+    await update.message.reply_text("👋 Welcome! Open the MiniApp to see current signals.", reply_markup=InlineKeyboardMarkup(kb))
 
 async def cmd_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("💰 Send the wallet amount in USD. Example: `200`", parse_mode="Markdown")
@@ -284,9 +282,9 @@ def startup_event():
     resp = requests.post(url, data={"url": WEBHOOK_URL})
     print("[telegram] setWebhook:", resp.json())
 
-    print("[app] startup done; fetcher started, webhook registered")
+    print(f"[app] startup done; fetcher started, webhook registered at {WEBHOOK_URL}")
 
 # ================= MAIN =================
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
