@@ -6,20 +6,24 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, List
 
 import ccxt
+import requests
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 # ================= CONFIG =================
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-PUBLIC_URL = os.environ.get("PUBLIC_URL", "")
+PUBLIC_URL = os.environ.get("PUBLIC_URL", "")  # например https://arb-bot.onrender.com
 
 if not TELEGRAM_BOT_TOKEN or not PUBLIC_URL:
     raise RuntimeError("Set TELEGRAM_BOT_TOKEN and PUBLIC_URL environment variables!")
+
+WEBHOOK_PATH = f"/webhook/{TELEGRAM_BOT_TOKEN}"
+WEBHOOK_URL = PUBLIC_URL.rstrip("/") + WEBHOOK_PATH
 
 EX_IDS = ["binance", "gateio", "mexc", "bingx", "lbank"]
 QUOTE = "USDT"
@@ -212,7 +216,7 @@ def fetcher_loop():
         time.sleep(FETCH_INTERVAL)
 
 # ================= TELEGRAM BOT =================
-TELE_BOT_APP = None
+TELE_BOT_APP = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = PUBLIC_URL.rstrip("/") + "/miniapp"
@@ -232,13 +236,9 @@ async def wallet_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     except Exception:
         await update.message.reply_text("❌ Could not parse amount. Send a number, e.g. `200`", parse_mode="Markdown")
 
-def start_telegram_bot_in_thread():
-    global TELE_BOT_APP
-    TELE_BOT_APP = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
-    TELE_BOT_APP.add_handler(CommandHandler("start", cmd_start))
-    TELE_BOT_APP.add_handler(CommandHandler("wallet", cmd_wallet))
-    TELE_BOT_APP.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), wallet_text_handler))
-    TELE_BOT_APP.run_polling()
+TELE_BOT_APP.add_handler(CommandHandler("start", cmd_start))
+TELE_BOT_APP.add_handler(CommandHandler("wallet", cmd_wallet))
+TELE_BOT_APP.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), wallet_text_handler))
 
 # ================= FASTAPI ROUTES =================
 @app.get("/miniapp", response_class=HTMLResponse)
@@ -267,12 +267,24 @@ async def api_signals(request: Request):
 async def health():
     return {"status":"ok", "signals": len(SIGNALS)}
 
+# ================= TELEGRAM WEBHOOK =================
+@app.post(WEBHOOK_PATH)
+async def telegram_webhook(request: Request):
+    data = await request.json()
+    await TELE_BOT_APP.update_queue.put(Update.de_json(data, TELE_BOT_APP.bot))
+    return {"ok": True}
+
 # ================= STARTUP =================
 @app.on_event("startup")
 def startup_event():
     threading.Thread(target=fetcher_loop, daemon=True).start()
-    threading.Thread(target=start_telegram_bot_in_thread, daemon=True).start()
-    print("[app] startup done; fetcher and telegram bot started")
+
+    # Установить webhook при старте
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setWebhook"
+    resp = requests.post(url, data={"url": WEBHOOK_URL})
+    print("[telegram] setWebhook:", resp.json())
+
+    print("[app] startup done; fetcher started, webhook registered")
 
 # ================= MAIN =================
 if __name__ == "__main__":
