@@ -1,5 +1,6 @@
 fastapi
 uvicorn
+gunicorn==23.0.0
 python-telegram-bot==20.3
 ccxt
 requests
