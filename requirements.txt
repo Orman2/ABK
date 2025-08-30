@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+python-telegram-bot==20.3
+ccxt
+requests
+jinja2

@@ -1,0 +1,74 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Arb MiniApp</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    body { font-family: Inter, Roboto, Arial; background:#0f1724; color:#e6eef8; margin:0; padding:20px; }
+    header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+    h1 { margin:0; font-size:18px; }
+    .card { background:#111827; border-radius:10px; padding:12px; margin-bottom:10px; box-shadow: 0 4px 12px rgba(2,6,23,.6); }
+    .pair { font-weight:700; font-size:16px; }
+    .meta { font-size:13px; color:#9aa6b2; margin-top:6px; }
+    .btn { background:#06b6d4; color:#041025; padding:8px 12px; border-radius:8px; border:none; font-weight:700; cursor:pointer; }
+    #signals { margin-top:8px; }
+    .small { font-size:13px; color:#9aa6b2; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🔥 Arbitrage Signals</h1>
+    <div>
+      <button id="refreshBtn" class="btn">Refresh</button>
+    </div>
+  </header>
+
+  <div class="small">MiniApp running inside Telegram. Next funding times shown in UTC.</div>
+
+  <div id="signals">
+    <div class="card">Loading signals…</div>
+  </div>
+
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.expand();
+
+    async function loadSignals(){
+      try {
+        const res = await fetch("/api/signals");
+        const arr = await res.json();
+        const div = document.getElementById("signals");
+        if (!arr || arr.length === 0) {
+          div.innerHTML = '<div class="card">No signals found right now.</div>';
+          return;
+        }
+        div.innerHTML = "";
+        for (const s of arr) {
+          const el = document.createElement("div");
+          el.className = "card";
+          el.innerHTML = `
+            <div class="pair">${s.pair} — Spread: ${Number(s.spread).toFixed(2)}%</div>
+            <div class="meta">
+              1) ${s.ex_a.toUpperCase()}: ${Number(s.price_a).toPrecision(8)} (${s.vol_a.toFixed(2)}) <br>
+              2) ${s.ex_b.toUpperCase()}: ${Number(s.price_b).toPrecision(8)} (${s.vol_b.toFixed(2)}) <br>
+              Next funding: ${s.next_funding}<br>
+              <small>Estimated Earn (if wallet set): ${s.estimated_earn ? ('$' + Number(s.estimated_earn).toFixed(2)) : '—'}</small>
+            </div>
+          `;
+          div.appendChild(el);
+        }
+      } catch(err){
+        console.error(err);
+        document.getElementById("signals").innerHTML = '<div class="card">Error loading signals.</div>';
+      }
+    }
+
+    document.getElementById("refreshBtn").addEventListener("click", loadSignals);
+
+    // initial load
+    loadSignals();
+  </script>
+</body>
+</html>

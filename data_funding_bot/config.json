@@ -1,0 +1,4 @@
+{
+  "poll_interval_sec": 30,
+  "default_threshold_fraction": 0.0003
+}
