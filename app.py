@@ -295,10 +295,13 @@ async def telegram_webhook(request: Request):
     if secret_token and request.headers.get("x-telegram-bot-api-secret-token") != secret_token:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    # Получаем сырые данные из запроса.
-    data = await request.body()
+    # Получаем сырые JSON-данные из запроса.
+    data = await request.json()
+
     # Правильный способ передачи данных вебхука в Application.
-    await TELE_BOT_APP.update.post(data)
+    # Метод `process_update` ожидает объект `Update`.
+    update = Update.de_json(data, TELE_BOT_APP.bot)
+    await TELE_BOT_APP.process_update(update)
 
     return {"ok": True}
 
