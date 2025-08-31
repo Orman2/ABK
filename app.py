@@ -289,15 +289,17 @@ async def health():
 # ================= TELEGRAM WEBHOOK =================
 @app.post(WEBHOOK_PATH)
 async def telegram_webhook(request: Request):
-    # Примечание: Убедитесь, что эта строка совпадает со строкой в startup_event
+    # Добавлена проверка секретного токена для безопасности.
+    # Убедитесь, что TELEGRAM_WEBHOOK_SECRET установлен в Railway.
     secret_token = os.environ.get("TELEGRAM_WEBHOOK_SECRET")
     if secret_token and request.headers.get("x-telegram-bot-api-secret-token") != secret_token:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    # Получаем сырые данные из запроса
+    # Получаем сырые данные из запроса.
     data = await request.body()
-    # Обрабатываем их с помощью метода Application.update_handler
-    await TELE_BOT_APP.update_handler(data)
+    # Правильный способ передачи данных вебхука в Application.
+    await TELE_BOT_APP.update.post(data)
+
     return {"ok": True}
 
 
@@ -308,7 +310,6 @@ def startup_event():
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setWebhook"
 
-    # Примечание: Установите переменную TELEGRAM_WEBHOOK_SECRET в Railway
     secret_token = os.environ.get("TELEGRAM_WEBHOOK_SECRET")
     resp = requests.post(
         url,
