@@ -145,6 +145,7 @@ def load_futures_markets(ex):
 def fetch_prices(ex, base_map, symbols):
     result = {}
     volumes = {}
+    funding_rates = {}
     try:
         tickers = ex.fetch_tickers(symbols)
     except Exception:
@@ -155,20 +156,23 @@ def fetch_prices(ex, base_map, symbols):
         if not t:
             continue
         last = safe_float(t.get("last")) or safe_float(t.get("close"))
+        bid = safe_float(t.get("bid"))
+        ask = safe_float(t.get("ask"))
         vol = safe_float(t.get("quoteVolume")) or safe_float(t.get("baseVolume")) or 0
+        funding_rate = safe_float(t.get("fundingRate"))
         if last:
-            result[base] = last
+            result[base] = {"last": last, "bid": bid, "ask": ask}
             volumes[base] = vol
-    return result, volumes
+            funding_rates[base] = funding_rate
+    return result, volumes, funding_rates
 
 
 def calculate_spreads(signal):
-    price_a = signal.get('price_a', 0)
-    price_b = signal.get('price_b', 0)
-    # Здесь вам нужно получить реальные значения funding_a и funding_b
-    # Пока используем заглушки для демонстрации
-    funding_a = 0.005  # Пример
-    funding_b = 0.003  # Пример
+    price_a = signal.get('price_a', 0).get("last")
+    price_b = signal.get('price_b', 0).get("last")
+
+    funding_a = signal.get('funding_a', 0)
+    funding_b = signal.get('funding_b', 0)
 
     if price_a > 0:
         spread = ((price_b - price_a) / price_a) * 100
@@ -184,8 +188,6 @@ def calculate_spreads(signal):
     # Добавляем все рассчитанные значения в сигнал
     return {
         **signal,
-        'funding_a': funding_a,
-        'funding_b': funding_b,
         'funding_spread': funding_spread,
         'entry_spread': entry_spread,
         'exit_spread': exit_spread,
@@ -209,10 +211,12 @@ def fetcher_loop():
             local_signals = []
             prices_cache = {}
             volumes_cache = {}
+            funding_cache = {}
             for ex_id, ex in exchanges_map.items():
-                p, v = fetch_prices(ex, markets_info[ex_id]["base_map"], markets_info[ex_id]["symbols"])
+                p, v, f = fetch_prices(ex, markets_info[ex_id]["base_map"], markets_info[ex_id]["symbols"])
                 prices_cache[ex_id] = p
                 volumes_cache[ex_id] = v
+                funding_cache[ex_id] = f
 
             ex_ids = list(exchanges_map.keys())
             for i in range(len(ex_ids)):
@@ -226,13 +230,20 @@ def fetcher_loop():
                         if ma.get("quote") != QUOTE or mb.get("quote") != QUOTE: continue
                         pa = prices_cache[a].get(base)
                         pb = prices_cache[b].get(base)
+                        fa = funding_cache[a].get(base)
+                        fb = funding_cache[b].get(base)
                         va = volumes_cache[a].get(base, 0)
                         vb = volumes_cache[b].get(base, 0)
-                        if not pa or not pb: continue
-                        sp = pct(pa, pb)
+                        if not pa or not pb or fa is None or fb is None: continue
+
+                        price_a_last = pa.get("last")
+                        price_b_last = pb.get("last")
+
+                        sp = pct(price_a_last, price_b_last)
                         if sp is None: continue
                         if sp < SPREAD_THRESHOLD_MIN or sp > SPREAD_THRESHOLD_MAX: continue
                         next_fund = next_funding_time()
+
                         signal_data = {
                             "pair": f"{base}/{QUOTE}",
                             "ex_a": a,
@@ -241,13 +252,14 @@ def fetcher_loop():
                             "price_b": pb,
                             "vol_a": va,
                             "vol_b": vb,
+                            "funding_a": fa,
+                            "funding_b": fb,
                             "spread": sp,
-                            "next_funding": next_fund.strftime("%Y-%m-%d %H:%M UTC")
+                            "next_funding": next_fund.isoformat()
                         }
 
                         # Расчет всех спредов
                         full_signal = calculate_spreads(signal_data)
-
                         local_signals.append(full_signal)
             local_signals.sort(key=lambda x: -x["spread"])
             with SIGNALS_LOCK:
@@ -304,7 +316,6 @@ async def api_signals(request: Request):
     for s in arr:
         est = None
         if wallet:
-            # Используем уже рассчитанный спред для оценки заработка
             est = (s.get("spread", 0) / 100) * wallet - (wallet * COMMISSION * 2)
         o = dict(s)
         o["estimated_earn"] = est
