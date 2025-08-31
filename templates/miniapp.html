@@ -4,176 +4,357 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Концентрация Бот</title>
-    <link rel="stylesheet" href="style.css">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --card-bg-color: #242526;
+            --text-color: #f0f0f0;
+            --secondary-text-color: #888;
+            --green-color: #4CAF50;
+            --red-color: #F44336;
+            --purple-color: #9C27B0;
+            --entry-color: #FFC107;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #app-container {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            max-width: 600px;
+            margin: auto;
+            width: 100%;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Общие стили для заголовка и навигации */
+        .app-header {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            background-color: var(--card-bg-color);
+            border-bottom: 1px solid #333;
+            font-size: 18px;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+
+        .header-title {
+            flex-grow: 1;
+            text-align: center;
+            margin: 0;
+        }
+
+        .app-header .icon-btn {
+            background: none;
+            border: none;
+            color: var(--secondary-text-color);
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .app-header .search-bar {
+            flex-grow: 1;
+            margin: 0 10px;
+        }
+
+        .app-header .search-bar input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #555;
+            background-color: #333;
+            color: var(--text-color);
+            border-radius: 20px;
+            font-size: 14px;
+        }
+
+        .app-nav {
+            display: flex;
+            justify-content: space-around;
+            padding: 10px 0;
+            background-color: var(--card-bg-color);
+            border-top: 1px solid #333;
+            flex-shrink: 0;
+        }
+
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-decoration: none;
+            color: var(--secondary-text-color);
+            font-size: 12px;
+        }
+
+        .nav-icon {
+            font-size: 24px;
+        }
+
+        .main-content {
+            flex-grow: 1;
+            padding: 15px;
+            overflow-y: auto;
+        }
+
+        /* Стили для разделов спредов */
+        .pair-section {
+            background-color: var(--card-bg-color);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        #loading-state {
+            text-align: center;
+            padding: 50px;
+        }
+
+        .pair-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .pair-icon {
+            display: inline-block;
+            font-size: 1.5rem;
+            width: 1.5em;
+            height: 1.5em;
+        }
+
+        .pair-name {
+            font-size: 18px;
+            font-weight: bold;
+            flex-grow: 1;
+        }
+
+        .icon-wrap {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .icon-label {
+            background-color: var(--purple-color);
+            color: #fff;
+            padding: 2px 6px;
+            border-radius: 5px;
+            font-size: 12px;
+        }
+
+        .summary-info {
+            font-size: 14px;
+            color: var(--secondary-text-color);
+            margin-bottom: 10px;
+        }
+
+        .commission-value {
+            color: var(--text-color);
+            font-weight: bold;
+        }
+
+        .spread-info {
+            display: flex;
+            flex-direction: column;
+            font-size: 12px;
+            margin-top: 5px;
+            gap: 2px;
+        }
+
+        .green { color: var(--green-color); }
+        .red { color: var(--red-color); }
+
+        .panel-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .panel {
+            flex: 1;
+            background-color: var(--card-bg-color);
+            border-radius: 10px;
+            padding: 15px;
+            border: 1px solid #333;
+        }
+
+        .panel-header {
+            font-size: 14px;
+            font-weight: bold;
+            color: var(--secondary-text-color);
+            margin-bottom: 10px;
+        }
+
+        .panel-icon-text {
+            font-size: 24px;
+            margin-right: 5px;
+        }
+
+        .panel-data .data-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .data-value {
+            font-weight: bold;
+        }
+
+        /* Стили для графика */
+        .chart-section {
+            background-color: var(--card-bg-color);
+            border-radius: 10px;
+            padding: 15px;
+            border: 1px solid #333;
+        }
+
+        .status {
+            font-size: 14px;
+            color: var(--secondary-text-color);
+            margin-bottom: 10px;
+        }
+
+        .online {
+            color: var(--green-color);
+        }
+
+        .chart-placeholder {
+            height: 150px;
+            background: #333;
+            border-radius: 5px;
+            position: relative;
+            margin-bottom: 10px;
+        }
+
+        .chart-values {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .value-item {
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .value-number {
+            font-weight: bold;
+        }
+
+        .exit .value-number { color: var(--red-color); }
+        .entry .value-number { color: var(--green-color); }
+        .your-entry { color: var(--entry-color); }
+
+        .main-footer {
+            padding: 15px;
+            text-align: center;
+            border-top: 1px solid #333;
+        }
+
+        .spread-history-title {
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .spread-history-subtitle {
+            font-size: 12px;
+            color: var(--secondary-text-color);
+            margin-bottom: 10px;
+        }
+
+        .period-selector {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            font-size: 14px;
+            color: var(--text-color);
+        }
+
+        /* Стили для экрана со списком спредов */
+        #list-screen .app-header {
+            justify-content: space-between;
+        }
+
+        #list-screen .header-title {
+            display: none;
+        }
+
+        .sort-bar {
+            background-color: var(--card-bg-color);
+            padding: 10px 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+
+        .signal-list .pair-section {
+            cursor: pointer;
+        }
+    </style>
 </head>
 <body>
     <div id="app-container">
 
-        <div id="main-screen">
+        <div id="main-screen" class="hidden">
             <header class="app-header">
-                <span class="icon">
-                    <svg class="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
-                        <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m15 19-7-7 7-7"/>
+                <button class="icon-btn" onclick="showScreen('list')">
+                    <svg class="w-6 h-6" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
+                        <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19-7-7 7-7"/>
                     </svg>
-                </span>
+                </button>
                 <h1 class="header-title">Концентрация Бот | Кри...</h1>
-                <span class="icon">
-                    <svg class="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
+                <button class="icon-btn">
+                    <svg class="w-6 h-6" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
                         <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0 0c3.866 0 7-3.134 7-7a7 7 0 0 0-7-7c-3.866 0-7 3.134-7 7a7 7 0 0 0 7 7Zm0 0V3"/>
                     </svg>
-                </span>
+                </button>
             </header>
-
-            <main class="main-content">
-                <div class="pair-section">
-                    <div class="pair-header">
-                        <span class="pair-icon">
-                            <svg class="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
-                                <path fill-rule="evenodd" d="M2 12a10 10 0 1 1 20 0 10 10 0 0 1-20 0Zm9.406-5.5a1 1 0 1 0 0 2h.124a2.51 2.51 0 0 1 2.378 1.488 2.5 2.5 0 1 1 2.766 4.673A2.5 2.5 0 0 1 15 17.5a2.5 2.5 0 0 1-4.99-.21l-.01.21a2.5 2.5 0 0 1-4.707-.417 1 1 0 0 0-1.85.834A4.5 4.5 0 0 0 8 17.5a4.5 4.5 0 0 0 4.29-3.417 4.51 4.51 0 0 0-3.384-5.385 1 1 0 0 0 1.5-1.698Z" clip-rule="evenodd"/>
-                            </svg>
-                        </span>
-                        <span class="pair-name">GOAT</span>
-                        <span class="icon-wrap">
-                            <span class="icon">💬</span>
-                            <span class="icon">⚙️</span>
-                        </span>
-                    </div>
-                    <div class="summary-info">
-                        Суммарная комиссия: <span class="commission-value">0.007%</span>
-                        <div class="spread-info">
-                            <span>Спред фандинга: <span class="green">0.007%</span></span>
-                            <span>Спред входа: <span class="green">92.255%</span></span>
-                            <span>Спред выхода: <span class="green">92.288%</span></span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="panel-container">
-                    <div class="panel left-panel">
-                        <div class="panel-header">
-                            <span class="panel-icon-text">↓ S</span>
-                            KuCoin фьюч. <span class="panel-icon">🗗</span>
-                        </div>
-                        <div class="panel-data">
-                            <div class="data-row">Bid: <span class="data-value">0.082660</span></div>
-                            <div class="data-row">Ask: <span class="data-value">0.082730</span></div>
-                            <div class="data-row">Фандинг: <span class="data-value green">0.007%</span></div>
-                            <div class="data-row">Время фанд: <span class="data-value">17:00</span></div>
-                            <div class="data-row">Комиссия: <span class="data-value">—</span></div>
-                            <div class="data-row">Объем USDT 24Ч: <span class="data-value">1.36M</span></div>
-                        </div>
-                    </div>
-                    <div class="panel right-panel">
-                        <div class="panel-header">
-                            <span class="panel-icon-text">↑ L</span>
-                            LBank фьюч. <span class="panel-icon">🗗</span>
-                        </div>
-                        <div class="panel-data">
-                            <div class="data-row">Bid: <span class="data-value">0.006380</span></div>
-                            <div class="data-row">Ask: <span class="data-value">0.006402</span></div>
-                            <div class="data-row">Фандинг: <span class="data-value red">0.000%</span></div>
-                            <div class="data-row">Время фанд: <span class="data-value">17:00</span></div>
-                            <div class="data-row">Комиссия: <span class="data-value">—</span></div>
-                            <div class="data-row">Объем USDT 24Ч: <span class="data-value">812.62K</span></div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="chart-section">
-                    <div class="status">Статус: <span class="online">Онлайн</span></div>
-                    <div class="chart-placeholder"></div>
-                    <div class="chart-values">
-                        <div class="value-item exit">Выход <span class="value-number">92.29</span></div>
-                        <div class="value-item entry">Вход <span class="value-number">92.26</span></div>
-                        <div class="value-item your-entry">Ваш. вх. 91.723%</div>
-                    </div>
-                </div>
-            </main>
-
-            <footer class="main-footer">
-                <div class="spread-history-title">GOAT - История спредов</div>
-                <div class="spread-history-subtitle">Биржи: KuCoin фьючерс и LBank фьючерс</div>
-                <div class="period-selector">
-                    Период: <span>3 дня</span> <span class="icon">⬇️</span>
-                </div>
-            </footer>
+            <main class="main-content" id="main-content">
+                </main>
         </div>
 
-        <div id="detail-screen" class="hidden">
+        <div id="list-screen">
             <header class="app-header">
-                <span class="icon">
-                    <svg class="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
+                <button class="icon-btn">
+                    <svg class="w-6 h-6" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
                         <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m15 19-7-7 7-7"/>
                     </svg>
-                </span>
-                <h1 class="header-title">Концентрация Бот | Кри...</h1>
+                </button>
                 <div class="search-bar">
                     <input type="text" placeholder="Введите название монеты">
                 </div>
-                <span class="icon">
-                     <svg class="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
+                <button class="icon-btn">
+                    <svg class="w-6 h-6" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
                         <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m15 19-7-7 7-7"/>
                     </svg>
-                </span>
+                </button>
             </header>
-
             <main class="main-content">
                 <div class="sort-bar">
                     <span class="icon">⬇️</span>
                     АБК
                 </div>
-                <div class="signal-list">
-                    <div class="signal-item">
-                        <div class="pair-section">
-                            <div class="pair-header">
-                                <span class="pair-icon">
-                                    <svg class="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
-                                        <path fill-rule="evenodd" d="M2 12a10 10 0 1 1 20 0 10 10 0 0 1-20 0Zm9.406-5.5a1 1 0 1 0 0 2h.124a2.51 2.51 0 0 1 2.378 1.488 2.5 2.5 0 1 1 2.766 4.673A2.5 2.5 0 0 1 15 17.5a2.5 2.5 0 0 1-4.99-.21l-.01.21a2.5 2.5 0 0 1-4.707-.417 1 1 0 0 0-1.85.834A4.5 4.5 0 0 0 8 17.5a4.5 4.5 0 0 0 4.29-3.417 4.51 4.51 0 0 0-3.384-5.385 1 1 0 0 0 1.5-1.698Z" clip-rule="evenodd"/>
-                                    </svg>
-                                </span>
-                                <span class="pair-name">XPL</span>
-                                <span class="icon-wrap">
-                                    <span class="icon-label">4</span>
-                                    <span class="icon">⚙️</span>
-                                </span>
-                            </div>
-                            <div class="summary-info">
-                                Суммарная комиссия: <span class="commission-value">0.018%</span>
-                                <div class="spread-info">
-                                    <span>Спред фандинга: <span class="green">0.018%</span></span>
-                                    <span>Спред входа: <span class="green">13.692%</span></span>
-                                    <span>Спред выхода: <span class="green">18.256%</span></span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="panel-container">
-                            <div class="panel left-panel">
-                                <div class="panel-header">
-                                    <span class="panel-icon-text">↓ S</span> LBank фьюч. <span class="panel-icon">🗗</span>
-                                </div>
-                                <div class="panel-data">
-                                    <div class="data-row">Bid: <span class="data-value">0.79830083</span></div>
-                                    <div class="data-row">Ask: <span class="data-value">0.79949983</span></div>
-                                    <div class="data-row">Фандинг: <span class="data-value green">0.018%</span></div>
-                                    <div class="data-row">Время фанд: <span class="data-value">09:00</span></div>
-                                    <div class="data-row">Комиссия: <span class="data-value">—</span></div>
-                                    <div class="data-row">Объем USDT 24Ч: <span class="data-value">205.63K</span></div>
-                                </div>
-                            </div>
-                            <div class="panel right-panel">
-                                <div class="panel-header">
-                                    <span class="panel-icon-text">↑ L</span> BingX спот <span class="panel-icon">🗗</span>
-                                </div>
-                                <div class="panel-data">
-                                    <div class="data-row">Bid: <span class="data-value">0.65354000</span></div>
-                                    <div class="data-row">Ask: <span class="data-value">0.68900000</span></div>
-                                    <div class="data-row">Фандинг: <span class="data-value red">—</span></div>
-                                    <div class="data-row">Объем USDT 24Ч: <span class="data-value">1.04M</span></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                <div class="signal-list" id="signal-list">
+                    <div id="loading-state">Загрузка сигналов...</div>
                 </div>
             </main>
         </div>
@@ -193,5 +374,188 @@
             </a>
         </nav>
     </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+
+        let allSignals = [];
+
+        // Функция для переключения экранов
+        function showScreen(screenId, signalData = null) {
+            const mainScreen = document.getElementById('main-screen');
+            const listScreen = document.getElementById('list-screen');
+            const mainContent = document.getElementById('main-content');
+
+            if (screenId === 'main' && signalData) {
+                mainContent.innerHTML = generateMainScreenContent(signalData);
+                mainScreen.classList.remove('hidden');
+                listScreen.classList.add('hidden');
+            } else if (screenId === 'list') {
+                mainScreen.classList.add('hidden');
+                listScreen.classList.remove('hidden');
+            }
+        }
+
+        // Функция для загрузки данных
+        async function loadSignals() {
+            const signalList = document.getElementById('signal-list');
+            signalList.innerHTML = '<div id="loading-state">Загрузка сигналов...</div>';
+
+            try {
+                const userId = tg.initDataUnsafe.user.id;
+                const res = await fetch(`/api/signals?user_id=${userId}`);
+                const signals = await res.json();
+
+                allSignals = signals; // Сохраняем все сигналы для детального просмотра
+
+                if (!signals || signals.length === 0) {
+                    signalList.innerHTML = '<div id="loading-state">Сигналов пока нет.</div>';
+                    return;
+                }
+
+                renderSignalList(signals);
+            } catch(err) {
+                console.error(err);
+                signalList.innerHTML = '<div id="loading-state">Ошибка загрузки сигналов.</div>';
+            }
+        }
+
+        // Функция для рендеринга списка сигналов
+        function renderSignalList(signals) {
+            const signalList = document.getElementById('signal-list');
+            signalList.innerHTML = '';
+
+            signals.forEach(s => {
+                const signalItem = document.createElement('div');
+                signalItem.className = 'signal-item';
+                signalItem.dataset.pair = s.pair; // Сохраняем пару для поиска
+
+                signalItem.innerHTML = `
+                    <div class="pair-section">
+                        <div class="pair-header">
+                            <span class="pair-icon">GOAT</span>
+                            <span class="pair-name">${s.pair}</span>
+                            <span class="icon-wrap">
+                                <span class="icon-label">${s.signals_count}</span>
+                                <span class="icon">⚙️</span>
+                            </span>
+                        </div>
+                        <div class="summary-info">
+                            Суммарная комиссия: <span class="commission-value">${Number(s.total_commission).toFixed(3)}%</span>
+                            <div class="spread-info">
+                                <span>Спред фандинга: <span class="${s.funding_spread > 0 ? 'green' : 'red'}">${Number(s.funding_spread).toFixed(3)}%</span></span>
+                                <span>Спред входа: <span class="${s.entry_spread > 0 ? 'green' : 'red'}">${Number(s.entry_spread).toFixed(3)}%</span></span>
+                                <span>Спред выхода: <span class="${s.exit_spread > 0 ? 'green' : 'red'}">${Number(s.exit_spread).toFixed(3)}%</span></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="panel-container">
+                        <div class="panel left-panel">
+                            <div class="panel-header">
+                                <span class="panel-icon-text">↓ S</span> ${s.ex_a_name} <span class="panel-icon">🗗</span>
+                            </div>
+                            <div class="panel-data">
+                                <div class="data-row">Bid: <span class="data-value">${Number(s.ex_a_bid).toFixed(8)}</span></div>
+                                <div class="data-row">Ask: <span class="data-value">${Number(s.ex_a_ask).toFixed(8)}</span></div>
+                                <div class="data-row">Фандинг: <span class="data-value ${s.ex_a_funding_rate > 0 ? 'green' : 'red'}">${Number(s.ex_a_funding_rate).toFixed(3)}%</span></div>
+                                <div class="data-row">Время фанд: <span class="data-value">${s.ex_a_funding_time}</span></div>
+                                <div class="data-row">Объем USDT 24Ч: <span class="data-value">${Number(s.ex_a_volume_24h / 1000000).toFixed(2)}M</span></div>
+                            </div>
+                        </div>
+                        <div class="panel right-panel">
+                            <div class="panel-header">
+                                <span class="panel-icon-text">↑ L</span> ${s.ex_b_name} <span class="panel-icon">🗗</span>
+                            </div>
+                            <div class="panel-data">
+                                <div class="data-row">Bid: <span class="data-value">${Number(s.ex_b_bid).toFixed(8)}</span></div>
+                                <div class="data-row">Ask: <span class="data-value">${Number(s.ex_b_ask).toFixed(8)}</span></div>
+                                <div class="data-row">Фандинг: <span class="data-value ${s.ex_b_funding_rate > 0 ? 'green' : 'red'}">${Number(s.ex_b_funding_rate).toFixed(3)}%</span></div>
+                                <div class="data-row">Время фанд: <span class="data-value">${s.ex_b_funding_time}</span></div>
+                                <div class="data-row">Объем USDT 24Ч: <span class="data-value">${Number(s.ex_b_volume_24h / 1000000).toFixed(2)}M</span></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                signalList.appendChild(signalItem);
+
+                signalItem.addEventListener('click', () => showScreen('main', s));
+            });
+        }
+
+        // Функция для генерации контента главного экрана на основе данных
+        function generateMainScreenContent(s) {
+            return `
+                <div class="pair-section">
+                    <div class="pair-header">
+                        <span class="pair-icon">GOAT</span>
+                        <span class="pair-name">${s.pair}</span>
+                        <span class="icon-wrap">
+                            <span class="icon-label">${s.signals_count}</span>
+                            <span class="icon">⚙️</span>
+                        </span>
+                    </div>
+                    <div class="summary-info">
+                        Суммарная комиссия: <span class="commission-value">${Number(s.total_commission).toFixed(3)}%</span>
+                        <div class="spread-info">
+                            <span>Спред фандинга: <span class="${s.funding_spread > 0 ? 'green' : 'red'}">${Number(s.funding_spread).toFixed(3)}%</span></span>
+                            <span>Спред входа: <span class="${s.entry_spread > 0 ? 'green' : 'red'}">${Number(s.entry_spread).toFixed(3)}%</span></span>
+                            <span>Спред выхода: <span class="${s.exit_spread > 0 ? 'green' : 'red'}">${Number(s.exit_spread).toFixed(3)}%</span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-container">
+                    <div class="panel left-panel">
+                        <div class="panel-header">
+                            <span class="panel-icon-text">↓ S</span> ${s.ex_a_name} <span class="panel-icon">🗗</span>
+                        </div>
+                        <div class="panel-data">
+                            <div class="data-row">Bid: <span class="data-value">${Number(s.ex_a_bid).toFixed(8)}</span></div>
+                            <div class="data-row">Ask: <span class="data-value">${Number(s.ex_a_ask).toFixed(8)}</span></div>
+                            <div class="data-row">Фандинг: <span class="data-value ${s.ex_a_funding_rate > 0 ? 'green' : 'red'}">${Number(s.ex_a_funding_rate).toFixed(3)}%</span></div>
+                            <div class="data-row">Время фанд: <span class="data-value">${s.ex_a_funding_time}</span></div>
+                            <div class="data-row">Объем USDT 24Ч: <span class="data-value">${Number(s.ex_a_volume_24h / 1000000).toFixed(2)}M</span></div>
+                        </div>
+                    </div>
+                    <div class="panel right-panel">
+                        <div class="panel-header">
+                            <span class="panel-icon-text">↑ L</span> ${s.ex_b_name} <span class="panel-icon">🗗</span>
+                        </div>
+                        <div class="panel-data">
+                            <div class="data-row">Bid: <span class="data-value">${Number(s.ex_b_bid).toFixed(8)}</span></div>
+                            <div class="data-row">Ask: <span class="data-value">${Number(s.ex_b_ask).toFixed(8)}</span></div>
+                            <div class="data-row">Фандинг: <span class="data-value ${s.ex_b_funding_rate > 0 ? 'green' : 'red'}">${Number(s.ex_b_funding_rate).toFixed(3)}%</span></div>
+                            <div class="data-row">Время фанд: <span class="data-value">${s.ex_b_funding_time}</span></div>
+                            <div class="data-row">Объем USDT 24Ч: <span class="data-value">${Number(s.ex_b_volume_24h / 1000000).toFixed(2)}M</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chart-section">
+                    <div class="status">Статус: <span class="online">Онлайн</span></div>
+                    <div class="chart-placeholder"></div>
+                    <div class="chart-values">
+                        <div class="value-item exit">Выход <span class="value-number">${Number(s.exit_price).toFixed(2)}</span></div>
+                        <div class="value-item entry">Вход <span class="value-number">${Number(s.entry_price).toFixed(2)}</span></div>
+                        <div class="value-item your-entry">Ваш. вх. ${Number(s.user_entry_price).toFixed(3)}%</div>
+                    </div>
+                </div>
+
+                <footer class="main-footer">
+                    <div class="spread-history-title">${s.pair} - История спредов</div>
+                    <div class="spread-history-subtitle">Биржи: ${s.ex_a_name} и ${s.ex_b_name}</div>
+                    <div class="period-selector">
+                        Период: <span>3 дня</span> <span class="icon">⬇️</span>
+                    </div>
+                </footer>
+            `;
+        }
+
+        // Инициализация
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSignals();
+        });
+    </script>
 </body>
 </html>
