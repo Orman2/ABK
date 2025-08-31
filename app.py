@@ -139,7 +139,7 @@ def load_futures_markets(ex):
             symbols.append(symbol)
             if base not in base_map:
                 base_map[base] = m
-    return {"base_map": base_map, "symbols": []}
+    return {"base_map": base_map, "symbols": symbols}
 
 
 def fetch_prices(ex, base_map, symbols):
@@ -160,6 +160,37 @@ def fetch_prices(ex, base_map, symbols):
             result[base] = last
             volumes[base] = vol
     return result, volumes
+
+
+def calculate_spreads(signal):
+    price_a = signal.get('price_a', 0)
+    price_b = signal.get('price_b', 0)
+    # Здесь вам нужно получить реальные значения funding_a и funding_b
+    # Пока используем заглушки для демонстрации
+    funding_a = 0.005  # Пример
+    funding_b = 0.003  # Пример
+
+    if price_a > 0:
+        spread = ((price_b - price_a) / price_a) * 100
+    else:
+        spread = 0
+
+    # Расчет спредов
+    funding_spread = (funding_b - funding_a) * 100
+    entry_spread = spread * 1.1 + COMMISSION * 100 * 2
+    exit_spread = spread * 0.9 - COMMISSION * 100 * 2
+    total_commission = COMMISSION * 2 * 100
+
+    # Добавляем все рассчитанные значения в сигнал
+    return {
+        **signal,
+        'funding_a': funding_a,
+        'funding_b': funding_b,
+        'funding_spread': funding_spread,
+        'entry_spread': entry_spread,
+        'exit_spread': exit_spread,
+        'total_commission': total_commission
+    }
 
 
 # ================= BACKGROUND FETCHER =================
@@ -202,7 +233,7 @@ def fetcher_loop():
                         if sp is None: continue
                         if sp < SPREAD_THRESHOLD_MIN or sp > SPREAD_THRESHOLD_MAX: continue
                         next_fund = next_funding_time()
-                        local_signals.append({
+                        signal_data = {
                             "pair": f"{base}/{QUOTE}",
                             "ex_a": a,
                             "ex_b": b,
@@ -212,7 +243,12 @@ def fetcher_loop():
                             "vol_b": vb,
                             "spread": sp,
                             "next_funding": next_fund.strftime("%Y-%m-%d %H:%M UTC")
-                        })
+                        }
+
+                        # Расчет всех спредов
+                        full_signal = calculate_spreads(signal_data)
+
+                        local_signals.append(full_signal)
             local_signals.sort(key=lambda x: -x["spread"])
             with SIGNALS_LOCK:
                 SIGNALS = local_signals[:200]
@@ -251,7 +287,6 @@ async def wallet_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text("❌ Could not parse amount. Send a number, e.g. `200`", parse_mode="Markdown")
 
 
-# Обработчики будут добавлены в startup_event
 # ================= FASTAPI ROUTES =================
 @app.get("/miniapp", response_class=HTMLResponse)
 async def miniapp(request: Request):
@@ -269,8 +304,8 @@ async def api_signals(request: Request):
     for s in arr:
         est = None
         if wallet:
-            price_diff = abs(s["price_a"] - s["price_b"])
-            est = (price_diff / max(s["price_a"], s["price_b"])) * wallet - (wallet * COMMISSION * 2)
+            # Используем уже рассчитанный спред для оценки заработка
+            est = (s.get("spread", 0) / 100) * wallet - (wallet * COMMISSION * 2)
         o = dict(s)
         o["estimated_earn"] = est
         out.append(o)
@@ -299,9 +334,7 @@ async def telegram_webhook(request: Request):
 # ================= STARTUP =================
 @app.on_event("startup")
 async def startup_event():
-    # Теперь инициализируем бота правильно, используя await
     await TELE_BOT_APP.initialize()
-    # Регистрируем обработчики после инициализации
     TELE_BOT_APP.add_handler(CommandHandler("start", cmd_start))
     TELE_BOT_APP.add_handler(CommandHandler("wallet", cmd_wallet))
     TELE_BOT_APP.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), wallet_text_handler))
@@ -309,7 +342,6 @@ async def startup_event():
     threading.Thread(target=fetcher_loop, daemon=True).start()
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setWebhook"
-
     secret_token = os.environ.get("TELEGRAM_WEBHOOK_SECRET")
     resp = requests.post(
         url,
@@ -319,7 +351,6 @@ async def startup_event():
         }
     )
     print("[telegram] setWebhook:", resp.json())
-
     print(f"[app] startup done; fetcher started, webhook registered at {WEBHOOK_URL}")
 
 
