@@ -30,6 +30,7 @@
             height: 100vh;
             display: flex;
             flex-direction: column;
+            /* УДАЛЕНО: overflow: hidden; */
         }
 
         #app-container {
@@ -39,6 +40,7 @@
             max-width: 600px;
             margin: auto;
             width: 100%;
+            /* УДАЛЕНО: overflow: hidden; */
             height: 100vh;
         }
 
@@ -46,6 +48,7 @@
             display: none !important;
         }
 
+        /* --- Header Styles --- */
         .app-header {
             display: flex;
             align-items: center;
@@ -240,14 +243,6 @@
             font-weight: bold;
         }
 
-        /* New Styles for Bid/Ask Labels */
-        .bid-ask-label {
-            font-size: 10px;
-            color: var(--secondary-text-color);
-            margin-left: 5px;
-            white-space: nowrap;
-        }
-
         /* --- Chart Section Styles --- */
         .chart-section {
             background-color: var(--card-bg-color);
@@ -357,49 +352,6 @@
         .signal-list .signal-item:active {
              background-color: rgba(255,255,255,0.05);
         }
-
-        /* --- New Entry Form Styles --- */
-        .entry-form-container {
-            margin-top: 15px;
-            padding: 15px;
-            background-color: var(--card-bg-color);
-            border-radius: 10px;
-            border: 1px solid #333;
-        }
-
-        .entry-form-header {
-            font-size: 16px;
-            font-weight: bold;
-            margin-bottom: 10px;
-            text-align: center;
-        }
-
-        .entry-form-fields {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .entry-form-fields .field-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .entry-form-fields .field-row label {
-            flex-basis: 30%;
-            font-size: 14px;
-        }
-
-        .entry-form-fields .field-row input {
-            flex-grow: 1;
-            padding: 8px 12px;
-            border: 1px solid #555;
-            background-color: #333;
-            color: var(--text-color);
-            border-radius: 8px;
-            font-size: 14px;
-        }
     </style>
 </head>
 <body>
@@ -468,7 +420,6 @@
 
         let allSignals = [];
         let chartInstance = null;
-        let currentSignal = null;
 
         function showScreen(screenId, signalData = null) {
             const mainScreen = document.getElementById('main-screen');
@@ -476,7 +427,6 @@
             const detailContent = document.getElementById('main-content-detail');
 
             if (screenId === 'main' && signalData) {
-                currentSignal = signalData;
                 detailContent.innerHTML = generateMainScreenContent(signalData);
                 mainScreen.classList.remove('hidden');
                 listScreen.classList.add('hidden');
@@ -549,9 +499,9 @@
                                 <span class="panel-icon-text">↓ S</span> ${s.ex_a.toUpperCase()} фьюч. <span class="panel-icon">🗗</span>
                             </div>
                             <div class="panel-data">
-                                <div class="data-row">Bid: <span class="data-value">${(s.price_a.bid || 0).toFixed(8)}</span> <span class="bid-ask-label">(для Short)</span></div>
-                                <div class="data-row">Ask: <span class="data-value">${(s.price_a.ask || 0).toFixed(8)}</span> <span class="bid-ask-label">(для Long)</span></div>
-                                <div class="data-row">Фандинг: <span class="data-value ${(s.funding_a || 0) >= 0 ? 'green' : 'red'}">${(s.funding_a || 0).toFixed(4)}%</span></div>
+                                <div class="data-row">Bid: <span class="data-value">${(s.price_a || 0).toFixed(8)}</span></div>
+                                <div class="data-row">Ask: <span class="data-value">${(s.price_a || 0).toFixed(8)}</span></div>
+                                <div class="data-row">Фандинг: <span class="data-value ${(s.funding_a || 0) >= 0 ? 'green' : 'red'}">${(s.funding_a || 0).toFixed(3)}%</span></div>
                                 <div class="data-row">Время: <span class="data-value">${fundingTime}</span></div>
                                 <div class="data-row">Объем: <span class="data-value">${((s.vol_a || 0) / 1000000).toFixed(2)}M</span></div>
                             </div>
@@ -561,9 +511,9 @@
                                 <span class="panel-icon-text">↑ L</span> ${s.ex_b.toUpperCase()} фьюч. <span class="panel-icon">🗗</span>
                             </div>
                             <div class="panel-data">
-                                <div class="data-row">Bid: <span class="data-value">${(s.price_b.bid || 0).toFixed(8)}</span> <span class="bid-ask-label">(для Short)</span></div>
-                                <div class="data-row">Ask: <span class="data-value">${(s.price_b.ask || 0).toFixed(8)}</span> <span class="bid-ask-label">(для Long)</span></div>
-                                <div class="data-row">Фандинг: <span class="data-value ${(s.funding_b || 0) >= 0 ? 'green' : 'red'}">${(s.funding_b || 0).toFixed(4)}%</span></div>
+                                <div class="data-row">Bid: <span class="data-value">${(s.price_b || 0).toFixed(8)}</span></div>
+                                <div class="data-row">Ask: <span class="data-value">${(s.price_b || 0).toFixed(8)}</span></div>
+                                <div class="data-row">Фандинг: <span class="data-value ${(s.funding_b || 0) >= 0 ? 'green' : 'red'}">${(s.funding_b || 0).toFixed(3)}%</span></div>
                                 <div class="data-row">Время: <span class="data-value">${fundingTime}</span></div>
                                 <div class="data-row">Объем: <span class="data-value">${((s.vol_b || 0) / 1000000).toFixed(2)}M</span></div>
                             </div>
@@ -607,9 +557,9 @@
                             <span class="panel-icon-text">↓ S</span> ${s.ex_a.toUpperCase()} фьюч. <span class="panel-icon">🗗</span>
                         </div>
                         <div class="panel-data">
-                            <div class="data-row">Bid: <span class="data-value">${(s.price_a.bid || 0).toFixed(8)}</span> <span class="bid-ask-label">(для Short)</span></div>
-                            <div class="data-row">Ask: <span class="data-value">${(s.price_a.ask || 0).toFixed(8)}</span> <span class="bid-ask-label">(для Long)</span></div>
-                            <div class="data-row">Фандинг: <span class="data-value ${(s.funding_a || 0) >= 0 ? 'green' : 'red'}">${(s.funding_a || 0).toFixed(4)}%</span></div>
+                            <div class="data-row">Bid: <span class="data-value">${(s.price_a || 0).toFixed(8)}</span></div>
+                            <div class="data-row">Ask: <span class="data-value">${(s.price_a || 0).toFixed(8)}</span></div>
+                            <div class="data-row">Фандинг: <span class="data-value ${(s.funding_a || 0) >= 0 ? 'green' : 'red'}">${(s.funding_a || 0).toFixed(3)}%</span></div>
                             <div class="data-row">Время: <span class="data-value">${fundingTime}</span></div>
                             <div class="data-row">Объем: <span class="data-value">${((s.vol_a || 0) / 1000000).toFixed(2)}M</span></div>
                         </div>
@@ -619,9 +569,9 @@
                             <span class="panel-icon-text">↑ L</span> ${s.ex_b.toUpperCase()} фьюч. <span class="panel-icon">🗗</span>
                         </div>
                         <div class="panel-data">
-                            <div class="data-row">Bid: <span class="data-value">${(s.price_b.bid || 0).toFixed(8)}</span> <span class="bid-ask-label">(для Short)</span></div>
-                            <div class="data-row">Ask: <span class="data-value">${(s.price_b.ask || 0).toFixed(8)}</span> <span class="bid-ask-label">(для Long)</span></div>
-                            <div class="data-row">Фандинг: <span class="data-value ${(s.funding_b || 0) >= 0 ? 'green' : 'red'}">${(s.funding_b || 0).toFixed(4)}%</span></div>
+                            <div class="data-row">Bid: <span class="data-value">${(s.price_b || 0).toFixed(8)}</span></div>
+                            <div class="data-row">Ask: <span class="data-value">${(s.price_b || 0).toFixed(8)}</span></div>
+                            <div class="data-row">Фандинг: <span class="data-value ${(s.funding_b || 0) >= 0 ? 'green' : 'red'}">${(s.funding_b || 0).toFixed(3)}%</span></div>
                             <div class="data-row">Время: <span class="data-value">${fundingTime}</span></div>
                             <div class="data-row">Объем: <span class="data-value">${((s.vol_b || 0) / 1000000).toFixed(2)}M</span></div>
                         </div>
@@ -636,23 +586,7 @@
                     <div class="chart-values">
                         <div class="value-item exit">Выход <span class="value-number">${(s.exit_spread || 0).toFixed(2)}%</span></div>
                         <div class="value-item entry">Вход <span class="value-number">${(s.entry_spread || 0).toFixed(2)}%</span></div>
-                        <div class="value-item your-entry">Ваш. вх. <span class="value-number" id="user-spread-display">${(s.spread || 0).toFixed(3)}%</span></div>
-                    </div>
-                </div>
-
-                <div class="entry-form-container">
-                    <div class="entry-form-header">
-                        Вход
-                    </div>
-                    <div class="entry-form-fields">
-                        <div class="field-row">
-                            <label>Short Bid:</label>
-                            <input type="number" id="short-bid-input" placeholder="Цена входа">
-                        </div>
-                        <div class="field-row">
-                            <label>Long Ask:</label>
-                            <input type="number" id="long-ask-input" placeholder="Цена входа">
-                        </div>
+                        <div class="value-item your-entry">Ваш. вх. <span class="value-number">${(s.spread || 0).toFixed(3)}%</span></div>
                     </div>
                 </div>
 
@@ -757,35 +691,6 @@
                     }
                 }
             });
-
-            // Add event listeners for new input fields
-            const shortBidInput = document.getElementById('short-bid-input');
-            const longAskInput = document.getElementById('long-ask-input');
-
-            const updateChartOnInput = () => {
-                const shortBid = parseFloat(shortBidInput.value);
-                const longAsk = parseFloat(longAskInput.value);
-
-                if (!isNaN(shortBid) && !isNaN(longAsk) && shortBid > 0 && longAsk > 0) {
-                    const userSpread = ((shortBid - longAsk) / longAsk) * 100;
-
-                    // Update the chart dataset
-                    const userSpreadDataset = chartInstance.data.datasets.find(ds => ds.label === 'Ваш вход');
-                    if (userSpreadDataset) {
-                        userSpreadDataset.data = Array(labels.length).fill(userSpread);
-                        chartInstance.update();
-                    }
-
-                    // Update the display value
-                    const userSpreadDisplay = document.getElementById('user-spread-display');
-                    if (userSpreadDisplay) {
-                        userSpreadDisplay.textContent = `${userSpread.toFixed(3)}%`;
-                    }
-                }
-            };
-
-            shortBidInput.addEventListener('input', updateChartOnInput);
-            longAskInput.addEventListener('input', updateChartOnInput);
         }
 
         const getCssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
