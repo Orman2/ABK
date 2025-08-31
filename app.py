@@ -42,6 +42,7 @@ templates = Jinja2Templates(directory="templates")
 if os.path.isdir("static"):
     app.mount("/static", StaticFiles(directory="static"), name="static")
 
+
 # ================= DATABASE =================
 def init_db():
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
@@ -61,14 +62,17 @@ def init_db():
     conn.commit()
     return conn
 
+
 DB_CONN = init_db()
 DB_LOCK = threading.Lock()
+
 
 def set_wallet(user_id: int, amount: float):
     with DB_LOCK:
         cur = DB_CONN.cursor()
         cur.execute("INSERT OR REPLACE INTO users (user_id, wallet) VALUES (?, ?)", (user_id, amount))
         DB_CONN.commit()
+
 
 def get_wallet(user_id: int):
     with DB_LOCK:
@@ -77,12 +81,14 @@ def get_wallet(user_id: int):
         row = cur.fetchone()
         return row[0] if row else None
 
+
 # ================= HELPERS =================
 def safe_float(x):
     try:
         return float(x) if x is not None else None
     except:
         return None
+
 
 def pct(a, b):
     try:
@@ -93,6 +99,7 @@ def pct(a, b):
     except:
         return None
 
+
 def next_funding_time():
     now = datetime.utcnow()
     hours = [0, 8, 16]
@@ -102,10 +109,11 @@ def next_funding_time():
             return t
     return (now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1))
 
+
 def init_exchange(ex_id: str):
     try:
         cls = getattr(ccxt, ex_id)
-        ex = cls({"enableRateLimit": True, "options":{"defaultType":"swap"}})
+        ex = cls({"enableRateLimit": True, "options": {"defaultType": "swap"}})
         try:
             ex.load_markets()
         except Exception:
@@ -113,6 +121,7 @@ def init_exchange(ex_id: str):
         return ex
     except Exception:
         return None
+
 
 def load_futures_markets(ex):
     base_map = {}
@@ -132,6 +141,7 @@ def load_futures_markets(ex):
                 base_map[base] = m
     return {"base_map": base_map, "symbols": []}
 
+
 def fetch_prices(ex, base_map, symbols):
     result = {}
     volumes = {}
@@ -150,6 +160,7 @@ def fetch_prices(ex, base_map, symbols):
             result[base] = last
             volumes[base] = vol
     return result, volumes
+
 
 # ================= BACKGROUND FETCHER =================
 def fetcher_loop():
@@ -174,7 +185,7 @@ def fetcher_loop():
 
             ex_ids = list(exchanges_map.keys())
             for i in range(len(ex_ids)):
-                for j in range(i+1, len(ex_ids)):
+                for j in range(i + 1, len(ex_ids)):
                     a, b = ex_ids[i], ex_ids[j]
                     commons = set(markets_info[a]["base_map"].keys()) & set(markets_info[b]["base_map"].keys())
                     for base in commons:
@@ -213,16 +224,21 @@ def fetcher_loop():
             print("[fetcher] error:", e)
         time.sleep(FETCH_INTERVAL)
 
+
 # ================= TELEGRAM BOT =================
 TELE_BOT_APP = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = PUBLIC_URL.rstrip("/") + "/miniapp"
     kb = [[InlineKeyboardButton("📊 Open MiniApp", web_app=WebAppInfo(url=url))]]
-    await update.message.reply_text("👋 Welcome! Open the MiniApp to see current signals.", reply_markup=InlineKeyboardMarkup(kb))
+    await update.message.reply_text("👋 Welcome! Open the MiniApp to see current signals.",
+                                    reply_markup=InlineKeyboardMarkup(kb))
+
 
 async def cmd_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("💰 Send the wallet amount in USD. Example: `200`", parse_mode="Markdown")
+
 
 async def wallet_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
@@ -234,14 +250,17 @@ async def wallet_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     except Exception:
         await update.message.reply_text("❌ Could not parse amount. Send a number, e.g. `200`", parse_mode="Markdown")
 
+
 TELE_BOT_APP.add_handler(CommandHandler("start", cmd_start))
 TELE_BOT_APP.add_handler(CommandHandler("wallet", cmd_wallet))
 TELE_BOT_APP.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), wallet_text_handler))
+
 
 # ================= FASTAPI ROUTES =================
 @app.get("/miniapp", response_class=HTMLResponse)
 async def miniapp(request: Request):
     return templates.TemplateResponse("miniapp.html", {"request": request})
+
 
 @app.get("/api/signals")
 async def api_signals(request: Request):
@@ -261,20 +280,26 @@ async def api_signals(request: Request):
         out.append(o)
     return JSONResponse(out)
 
+
 @app.get("/health")
 async def health():
-    return {"status":"ok", "signals": len(SIGNALS)}
+    return {"status": "ok", "signals": len(SIGNALS)}
+
 
 # ================= TELEGRAM WEBHOOK =================
 @app.post(WEBHOOK_PATH)
 async def telegram_webhook(request: Request):
-    if request.headers.get("x-telegram-bot-api-secret-token") != "your_secret_token_here":
+    # Примечание: Убедитесь, что эта строка совпадает со строкой в startup_event
+    secret_token = os.environ.get("TELEGRAM_WEBHOOK_SECRET")
+    if secret_token and request.headers.get("x-telegram-bot-api-secret-token") != secret_token:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    data = await request.json()
-    update = Update.de_json(data, TELE_BOT_APP.bot)
-    await TELE_BOT_APP.process_update(update)
+    # Получаем сырые данные из запроса
+    data = await request.body()
+    # Обрабатываем их с помощью метода Application.update_handler
+    await TELE_BOT_APP.update_handler(data)
     return {"ok": True}
+
 
 # ================= STARTUP =================
 @app.on_event("startup")
@@ -282,18 +307,23 @@ def startup_event():
     threading.Thread(target=fetcher_loop, daemon=True).start()
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setWebhook"
+
+    # Примечание: Установите переменную TELEGRAM_WEBHOOK_SECRET в Railway
+    secret_token = os.environ.get("TELEGRAM_WEBHOOK_SECRET")
     resp = requests.post(
         url,
         data={
             "url": WEBHOOK_URL,
-            "secret_token": "your_secret_token_here"
+            "secret_token": secret_token
         }
     )
     print("[telegram] setWebhook:", resp.json())
 
     print(f"[app] startup done; fetcher started, webhook registered at {WEBHOOK_URL}")
 
+
 # ================= MAIN =================
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run("app:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
