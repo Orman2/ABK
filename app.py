@@ -268,7 +268,9 @@ TELE_BOT_APP = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = PUBLIC_URL.rstrip("/") + "/miniapp"
     kb = [[InlineKeyboardButton("📊 Open MiniApp", web_app=WebAppInfo(url=url))]]
-    await update.message.reply_text("👋 Welcome! Open the MiniApp to see current signals.",
+    await update.message.reply_text("👋 Здравствуйте!"
+                                    
+                                    " Arb-bot - арбитражный бот, который показывает спред и готовые связки для арбитража фьючерсов, курсового спреда и фандинга..",
                                     reply_markup=InlineKeyboardMarkup(kb))
 
 
