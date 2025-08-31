@@ -227,7 +227,7 @@ def fetcher_loop():
 
 # ================= TELEGRAM BOT =================
 TELE_BOT_APP = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-# This line is the fix for the RuntimeError
+# Эта строка исправляет RuntimeError:
 TELE_BOT_APP.initialize()
 
 
