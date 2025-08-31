@@ -168,14 +168,17 @@ def fetch_prices(ex, base_map, symbols):
 
 
 def calculate_spreads(signal):
-    price_a = signal.get('price_a', 0).get("last")
-    price_b = signal.get('price_b', 0).get("last")
+    price_a_data = signal.get('price_a', {})
+    price_b_data = signal.get('price_b', {})
+
+    price_a_last = price_a_data.get('last', 0)
+    price_b_last = price_b_data.get('last', 0)
 
     funding_a = signal.get('funding_a', 0)
     funding_b = signal.get('funding_b', 0)
 
-    if price_a > 0:
-        spread = ((price_b - price_a) / price_a) * 100
+    if price_a_last > 0:
+        spread = ((price_b_last - price_a_last) / price_a_last) * 100
     else:
         spread = 0
 
@@ -188,6 +191,7 @@ def calculate_spreads(signal):
     # Добавляем все рассчитанные значения в сигнал
     return {
         **signal,
+        'spread': spread,
         'funding_spread': funding_spread,
         'entry_spread': entry_spread,
         'exit_spread': exit_spread,
@@ -223,25 +227,40 @@ def fetcher_loop():
                 for j in range(i + 1, len(ex_ids)):
                     a, b = ex_ids[i], ex_ids[j]
                     commons = set(markets_info[a]["base_map"].keys()) & set(markets_info[b]["base_map"].keys())
+
+                    if not commons:
+                        print(f"[fetcher] Нет общих пар между {a} и {b}")
+                        continue
+
                     for base in commons:
                         ma = markets_info[a]["base_map"].get(base)
                         mb = markets_info[b]["base_map"].get(base)
                         if not ma or not mb: continue
                         if ma.get("quote") != QUOTE or mb.get("quote") != QUOTE: continue
+
                         pa = prices_cache[a].get(base)
                         pb = prices_cache[b].get(base)
+
                         fa = funding_cache[a].get(base)
                         fb = funding_cache[b].get(base)
+
                         va = volumes_cache[a].get(base, 0)
                         vb = volumes_cache[b].get(base, 0)
-                        if not pa or not pb or fa is None or fb is None: continue
+
+                        if not pa or not pb or fa is None or fb is None:
+                            continue
 
                         price_a_last = pa.get("last")
                         price_b_last = pb.get("last")
 
+                        if not price_a_last or not price_b_last:
+                            continue
+
                         sp = pct(price_a_last, price_b_last)
-                        if sp is None: continue
-                        if sp < SPREAD_THRESHOLD_MIN or sp > SPREAD_THRESHOLD_MAX: continue
+
+                        if sp is None or sp < SPREAD_THRESHOLD_MIN or sp > SPREAD_THRESHOLD_MAX:
+                            continue
+
                         next_fund = next_funding_time()
 
                         signal_data = {
@@ -261,7 +280,8 @@ def fetcher_loop():
                         # Расчет всех спредов
                         full_signal = calculate_spreads(signal_data)
                         local_signals.append(full_signal)
-            local_signals.sort(key=lambda x: -x["spread"])
+
+            local_signals.sort(key=lambda x: -x.get("spread", 0))
             with SIGNALS_LOCK:
                 SIGNALS = local_signals[:200]
             if SIGNALS:
@@ -269,7 +289,7 @@ def fetcher_loop():
             else:
                 print("[fetcher] no signals found")
         except Exception as e:
-            print("[fetcher] error:", e)
+            print("[fetcher] Критическая ошибка:", e)
         time.sleep(FETCH_INTERVAL)
 
 
