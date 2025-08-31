@@ -227,8 +227,6 @@ def fetcher_loop():
 
 # ================= TELEGRAM BOT =================
 TELE_BOT_APP = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-# Эта строка исправляет RuntimeError:
-TELE_BOT_APP.initialize()
 
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -253,11 +251,7 @@ async def wallet_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text("❌ Could not parse amount. Send a number, e.g. `200`", parse_mode="Markdown")
 
 
-TELE_BOT_APP.add_handler(CommandHandler("start", cmd_start))
-TELE_BOT_APP.add_handler(CommandHandler("wallet", cmd_wallet))
-TELE_BOT_APP.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), wallet_text_handler))
-
-
+# Обработчики будут добавлены в startup_event
 # ================= FASTAPI ROUTES =================
 @app.get("/miniapp", response_class=HTMLResponse)
 async def miniapp(request: Request):
@@ -304,7 +298,14 @@ async def telegram_webhook(request: Request):
 
 # ================= STARTUP =================
 @app.on_event("startup")
-def startup_event():
+async def startup_event():
+    # Теперь инициализируем бота правильно, используя await
+    await TELE_BOT_APP.initialize()
+    # Регистрируем обработчики после инициализации
+    TELE_BOT_APP.add_handler(CommandHandler("start", cmd_start))
+    TELE_BOT_APP.add_handler(CommandHandler("wallet", cmd_wallet))
+    TELE_BOT_APP.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), wallet_text_handler))
+
     threading.Thread(target=fetcher_loop, daemon=True).start()
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setWebhook"
