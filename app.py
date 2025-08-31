@@ -145,7 +145,6 @@ def load_futures_markets(ex):
 def fetch_prices(ex, base_map, symbols):
     result = {}
     volumes = {}
-    funding_rates = {}
     try:
         tickers = ex.fetch_tickers(symbols)
     except Exception:
@@ -156,41 +155,37 @@ def fetch_prices(ex, base_map, symbols):
         if not t:
             continue
         last = safe_float(t.get("last")) or safe_float(t.get("close"))
-        bid = safe_float(t.get("bid"))
-        ask = safe_float(t.get("ask"))
         vol = safe_float(t.get("quoteVolume")) or safe_float(t.get("baseVolume")) or 0
-        funding_rate = safe_float(t.get("fundingRate"))
-
-        # Убедимся, что все данные присутствуют
-        if last is not None and bid is not None and ask is not None and funding_rate is not None:
-            result[base] = {"last": last, "bid": bid, "ask": ask}
+        if last:
+            result[base] = last
             volumes[base] = vol
-            funding_rates[base] = funding_rate
-    return result, volumes, funding_rates
+    return result, volumes
 
 
 def calculate_spreads(signal):
-    bid_price = signal.get('bid_price', 0)
-    ask_price = signal.get('ask_price', 0)
+    price_a = signal.get('price_a', 0)
+    price_b = signal.get('price_b', 0)
+    # Здесь вам нужно получить реальные значения funding_a и funding_b
+    # Пока используем заглушки для демонстрации
+    funding_a = 0.005  # Пример
+    funding_b = 0.003  # Пример
 
-    funding_a = signal.get('funding_a', 0)
-    funding_b = signal.get('funding_b', 0)
-
-    # Расчет спреда по твоей логике: (Bid - Ask) / Ask
-    if ask_price > 0:
-        spread = ((bid_price - ask_price) / ask_price) * 100
+    if price_a > 0:
+        spread = ((price_b - price_a) / price_a) * 100
     else:
         spread = 0
 
     # Расчет спредов
     funding_spread = (funding_b - funding_a) * 100
-    entry_spread = spread - COMMISSION * 100 * 2
-    exit_spread = entry_spread - 0.005  # Примерное значение, можно настроить
+    entry_spread = spread * 1.1 + COMMISSION * 100 * 2
+    exit_spread = spread * 0.9 - COMMISSION * 100 * 2
     total_commission = COMMISSION * 2 * 100
 
+    # Добавляем все рассчитанные значения в сигнал
     return {
         **signal,
-        'spread': spread,
+        'funding_a': funding_a,
+        'funding_b': funding_b,
         'funding_spread': funding_spread,
         'entry_spread': entry_spread,
         'exit_spread': exit_spread,
@@ -214,83 +209,47 @@ def fetcher_loop():
             local_signals = []
             prices_cache = {}
             volumes_cache = {}
-            funding_cache = {}
             for ex_id, ex in exchanges_map.items():
-                p, v, f = fetch_prices(ex, markets_info[ex_id]["base_map"], markets_info[ex_id]["symbols"])
+                p, v = fetch_prices(ex, markets_info[ex_id]["base_map"], markets_info[ex_id]["symbols"])
                 prices_cache[ex_id] = p
                 volumes_cache[ex_id] = v
-                funding_cache[ex_id] = f
 
             ex_ids = list(exchanges_map.keys())
             for i in range(len(ex_ids)):
                 for j in range(i + 1, len(ex_ids)):
                     a, b = ex_ids[i], ex_ids[j]
-                    commons = set(prices_cache[a].keys()) & set(prices_cache[b].keys())
-
-                    if not commons:
-                        continue
-
+                    commons = set(markets_info[a]["base_map"].keys()) & set(markets_info[b]["base_map"].keys())
                     for base in commons:
+                        ma = markets_info[a]["base_map"].get(base)
+                        mb = markets_info[b]["base_map"].get(base)
+                        if not ma or not mb: continue
+                        if ma.get("quote") != QUOTE or mb.get("quote") != QUOTE: continue
                         pa = prices_cache[a].get(base)
                         pb = prices_cache[b].get(base)
-
-                        fa = funding_cache[a].get(base)
-                        fb = funding_cache[b].get(base)
-
                         va = volumes_cache[a].get(base, 0)
                         vb = volumes_cache[b].get(base, 0)
+                        if not pa or not pb: continue
+                        sp = pct(pa, pb)
+                        if sp is None: continue
+                        if sp < SPREAD_THRESHOLD_MIN or sp > SPREAD_THRESHOLD_MAX: continue
+                        next_fund = next_funding_time()
+                        signal_data = {
+                            "pair": f"{base}/{QUOTE}",
+                            "ex_a": a,
+                            "ex_b": b,
+                            "price_a": pa,
+                            "price_b": pb,
+                            "vol_a": va,
+                            "vol_b": vb,
+                            "spread": sp,
+                            "next_funding": next_fund.strftime("%Y-%m-%d %H:%M UTC")
+                        }
 
-                        # Проверка 1: short A, long B
-                        bid_a = pa.get('bid')
-                        ask_b = pb.get('ask')
+                        # Расчет всех спредов
+                        full_signal = calculate_spreads(signal_data)
 
-                        if bid_a is not None and ask_b is not None and bid_a > ask_b:
-                            spread_val = pct(bid_a, ask_b)
-                            if SPREAD_THRESHOLD_MIN <= spread_val <= SPREAD_THRESHOLD_MAX:
-                                next_fund = next_funding_time()
-                                signal_data = {
-                                    "pair": f"{base}/{QUOTE}",
-                                    "short_ex": a,
-                                    "long_ex": b,
-                                    "price_a": pa,
-                                    "price_b": pb,
-                                    "vol_a": va,
-                                    "vol_b": vb,
-                                    "funding_a": fa,
-                                    "funding_b": fb,
-                                    "bid_price": bid_a,
-                                    "ask_price": ask_b,
-                                    "next_funding": next_fund.isoformat()
-                                }
-                                full_signal = calculate_spreads(signal_data)
-                                local_signals.append(full_signal)
-
-                        # Проверка 2: short B, long A
-                        bid_b = pb.get('bid')
-                        ask_a = pa.get('ask')
-
-                        if bid_b is not None and ask_a is not None and bid_b > ask_a:
-                            spread_val = pct(bid_b, ask_a)
-                            if SPREAD_THRESHOLD_MIN <= spread_val <= SPREAD_THRESHOLD_MAX:
-                                next_fund = next_funding_time()
-                                signal_data = {
-                                    "pair": f"{base}/{QUOTE}",
-                                    "short_ex": b,
-                                    "long_ex": a,
-                                    "price_a": pb,
-                                    "price_b": pa,
-                                    "vol_a": vb,
-                                    "vol_b": va,
-                                    "funding_a": fb,
-                                    "funding_b": fa,
-                                    "bid_price": bid_b,
-                                    "ask_price": ask_a,
-                                    "next_funding": next_fund.isoformat()
-                                }
-                                full_signal = calculate_spreads(signal_data)
-                                local_signals.append(full_signal)
-
-            local_signals.sort(key=lambda x: -x.get("spread", 0))
+                        local_signals.append(full_signal)
+            local_signals.sort(key=lambda x: -x["spread"])
             with SIGNALS_LOCK:
                 SIGNALS = local_signals[:200]
             if SIGNALS:
@@ -298,7 +257,7 @@ def fetcher_loop():
             else:
                 print("[fetcher] no signals found")
         except Exception as e:
-            print("[fetcher] Критическая ошибка:", e)
+            print("[fetcher] error:", e)
         time.sleep(FETCH_INTERVAL)
 
 
@@ -345,6 +304,7 @@ async def api_signals(request: Request):
     for s in arr:
         est = None
         if wallet:
+            # Используем уже рассчитанный спред для оценки заработка
             est = (s.get("spread", 0) / 100) * wallet - (wallet * COMMISSION * 2)
         o = dict(s)
         o["estimated_earn"] = est
