@@ -14,11 +14,18 @@
             --secondary-text-color: #888;
             --green-color: #4CAF50;
             --red-color: #F44336;
+            --your-entry-color: #00FF7F; /* Салатовый */
             --purple-color: #9C27B0;
             --entry-color: #FFC107; /* Your Entry yellow */
-            --chart-line-color: #06b6d4; /* Cyan/Turquoise */
+            --chart-line-color: #06b6d4;
             --chart-grid-color: rgba(136, 136, 136, 0.2);
             --chart-label-color: #888;
+            --button-bg-color: #333;
+            --button-text-color: #f0f0f0;
+            --button-hover-bg: #444;
+            --button-active-bg: #555;
+            --button-green-bg: #4CAF50;
+            --button-red-bg: #F44336;
         }
 
         body {
@@ -30,7 +37,7 @@
             height: 100vh;
             display: flex;
             flex-direction: column;
-            overflow: hidden; /* Prevent body scroll */
+            overflow: hidden;
         }
 
         #app-container {
@@ -40,7 +47,7 @@
             max-width: 600px;
             margin: auto;
             width: 100%;
-            overflow: hidden; /* Keep content within container */
+            overflow: hidden;
         }
 
         .hidden {
@@ -80,11 +87,11 @@
         .app-header .icon-btn svg {
             width: 24px;
             height: 24px;
-            stroke: currentColor; /* Use current text color */
+            stroke: currentColor;
             stroke-width: 2;
             fill: none;
         }
-        .app-header .icon-btn.text-btn { /* For "Закрыть" button */
+        .app-header .icon-btn.text-btn {
             font-size: 16px;
             padding: 0 5px;
         }
@@ -196,7 +203,7 @@
 
         .spread-info {
             display: flex;
-            flex-direction: column; /* Stack spread values */
+            flex-direction: column;
             font-size: 12px;
             margin-top: 5px;
             gap: 2px;
@@ -248,7 +255,7 @@
             border-radius: 10px;
             padding: 15px;
             border: 1px solid #333;
-            margin-bottom: 20px; /* Add margin for footer */
+            margin-bottom: 20px;
         }
 
         .status {
@@ -262,7 +269,7 @@
         }
 
         .chart-placeholder {
-            height: 150px; /* Use for canvas if needed, otherwise Chart.js manages it */
+            height: 150px;
             position: relative;
             margin-bottom: 10px;
         }
@@ -271,11 +278,10 @@
             height: 150px !important;
         }
 
-
         .chart-values {
             display: grid;
-            grid-template-columns: 1fr 1fr; /* Two columns */
-            gap: 5px 10px; /* Row gap and column gap */
+            grid-template-columns: 1fr 1fr;
+            gap: 5px 10px;
             margin-top: 10px;
         }
 
@@ -292,14 +298,14 @@
 
         .exit .value-number { color: var(--red-color); }
         .entry .value-number { color: var(--green-color); }
-        .your-entry .value-number { color: var(--entry-color); } /* Your Entry color */
+        .your-entry .value-number { color: var(--your-entry-color); }
 
         /* --- Footer Styles --- */
         .main-footer {
             padding: 15px;
             text-align: center;
             border-top: 1px solid #333;
-            flex-shrink: 0; /* Prevent footer from shrinking */
+            flex-shrink: 0;
         }
 
         .spread-history-title {
@@ -324,16 +330,14 @@
 
         /* --- List Screen Specific Styles --- */
         #list-screen .app-header .header-title {
-            display: none; /* Hide main title on list screen */
+            display: none;
         }
-        #list-screen .app-header .icon-btn:first-child { /* Hide "Back" button on list screen */
+        #list-screen .app-header .icon-btn:first-child {
             display: none;
         }
         #list-screen .app-header .icon-btn:last-child {
-            /* Make last icon (search/settings) visible */
             display: flex;
         }
-
 
         .sort-bar {
             background-color: var(--card-bg-color);
@@ -352,13 +356,41 @@
             transition: background-color 0.2s ease-in-out;
         }
         .signal-list .signal-item:active {
-             background-color: rgba(255,255,255,0.05); /* Visual feedback on tap */
+             background-color: rgba(255,255,255,0.05);
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .action-btn {
+            flex: 1;
+            padding: 12px 10px;
+            border-radius: 8px;
+            border: none;
+            font-weight: bold;
+            color: var(--button-text-color);
+            background-color: var(--button-bg-color);
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+
+        .action-btn:hover { background-color: var(--button-hover-bg); }
+        .action-btn:active { background-color: var(--button-active-bg); }
+
+        .action-btn.green {
+            background-color: var(--button-green-bg);
+        }
+
+        .action-btn.red {
+            background-color: var(--button-red-bg);
         }
     </style>
 </head>
 <body>
     <div id="app-container">
-
         <div id="main-screen" class="hidden">
             <header class="app-header">
                 <button class="icon-btn" onclick="showScreen('list')">
@@ -366,7 +398,7 @@
                         <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" d="m15 19-7-7 7-7"/>
                     </svg>
                 </button>
-                <h1 class="header-title">Arb-bot</h1>
+                <h1 class="header-title">Детали Спреда</h1>
                 <button class="icon-btn">
                     <svg viewBox="0 0 24 24">
                         <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0 0c3.866 0 7-3.134 7-7a7 7 0 0 0-7-7c-3.866 0-7 3.134-7 7a7 7 0 0 0 7 7Zm0 0V3"/>
@@ -374,7 +406,7 @@
                 </button>
             </header>
             <main class="main-content" id="main-content-detail">
-                </main>
+            </main>
         </div>
 
         <div id="list-screen">
@@ -421,25 +453,32 @@
         tg.expand();
 
         let allSignals = [];
-        let chartInstance = null; // Для хранения экземпляра Chart.js
+        let chartInstance = null;
+        let updateIntervalId = null;
+        let currentSignalData = null;
+        let myEntrySpread = null;
 
-        // Функция для переключения экранов
         function showScreen(screenId, signalData = null) {
             const mainScreen = document.getElementById('main-screen');
             const listScreen = document.getElementById('list-screen');
             const detailContent = document.getElementById('main-content-detail');
 
             if (screenId === 'main' && signalData) {
+                currentSignalData = signalData;
                 detailContent.innerHTML = generateMainScreenContent(signalData);
                 mainScreen.classList.remove('hidden');
                 listScreen.classList.add('hidden');
 
-                // Инициализация графика после вставки HTML
                 initializeChart(signalData);
+                if (updateIntervalId) clearInterval(updateIntervalId);
+                updateIntervalId = setInterval(() => updateChartAndData(), 5000); // Обновление каждые 5 секунд
             } else if (screenId === 'list') {
                 mainScreen.classList.add('hidden');
                 listScreen.classList.remove('hidden');
-                 // Уничтожить график при переключении на список
+                if (updateIntervalId) clearInterval(updateIntervalId);
+                updateIntervalId = null;
+                currentSignalData = null;
+                myEntrySpread = null;
                 if (chartInstance) {
                     chartInstance.destroy();
                     chartInstance = null;
@@ -447,7 +486,57 @@
             }
         }
 
-        // Функция для загрузки данных
+        async function updateChartAndData() {
+            if (!currentSignalData) return;
+
+            try {
+                const userId = tg.initDataUnsafe.user.id;
+                const res = await fetch(`/api/signal?pair=${currentSignalData.pair}&user_id=${userId}`);
+                const updatedSignal = await res.json();
+
+                if (updatedSignal && updatedSignal.pair === currentSignalData.pair) {
+                    currentSignalData = updatedSignal;
+
+                    document.getElementById('commission-value').innerText = updatedSignal.total_commission !== undefined ? Number(updatedSignal.total_commission).toFixed(3) + '%' : '—';
+                    document.getElementById('funding-spread').innerText = updatedSignal.funding_spread !== undefined ? Number(updatedSignal.funding_spread).toFixed(3) + '%' : '—';
+                    document.getElementById('entry-spread').innerText = updatedSignal.entry_spread !== undefined ? Number(updatedSignal.entry_spread).toFixed(3) + '%' : '—';
+                    document.getElementById('exit-spread').innerText = updatedSignal.exit_spread !== undefined ? Number(updatedSignal.exit_spread).toFixed(3) + '%' : '—';
+
+                    document.getElementById('price-a').innerText = updatedSignal.price_a !== undefined ? Number(updatedSignal.price_a).toFixed(8) : '—';
+                    document.getElementById('funding-a').innerText = updatedSignal.funding_a !== undefined ? Number(updatedSignal.funding_a).toFixed(3) + '%' : '—';
+                    document.getElementById('vol-a').innerText = updatedSignal.vol_a !== undefined ? (Number(updatedSignal.vol_a) / 1000000).toFixed(2) + 'M' : '—';
+
+                    document.getElementById('price-b').innerText = updatedSignal.price_b !== undefined ? Number(updatedSignal.price_b).toFixed(8) : '—';
+                    document.getElementById('funding-b').innerText = updatedSignal.funding_b !== undefined ? Number(updatedSignal.funding_b).toFixed(3) + '%' : '—';
+                    document.getElementById('vol-b').innerText = updatedSignal.vol_b !== undefined ? (Number(updatedSignal.vol_b) / 1000000).toFixed(2) + 'M' : '—';
+
+                    document.querySelector('.value-item.exit .value-number').innerText = updatedSignal.price_b !== undefined ? Number(updatedSignal.price_b).toFixed(2) : '—';
+                    document.querySelector('.value-item.entry .value-number').innerText = updatedSignal.price_a !== undefined ? Number(updatedSignal.price_a).toFixed(2) : '—';
+                    document.querySelector('.value-item.your-entry .value-number').innerText = updatedSignal.spread !== undefined ? Number(updatedSignal.spread).toFixed(3) + '%' : '—';
+
+                    if (chartInstance) {
+                        const now = new Date();
+                        const timeLabel = `${now.getHours()}:${now.getMinutes() < 10 ? '0' : ''}${now.getMinutes()}`;
+
+                        chartInstance.data.labels.push(timeLabel);
+                        chartInstance.data.datasets[0].data.push(updatedSignal.exit_spread);
+                        chartInstance.data.datasets[1].data.push(updatedSignal.entry_spread);
+                        chartInstance.data.datasets[2].data.push(myEntrySpread !== null ? myEntrySpread : updatedSignal.spread);
+
+                        const maxPoints = 20;
+                        if (chartInstance.data.labels.length > maxPoints) {
+                            chartInstance.data.labels.shift();
+                            chartInstance.data.datasets.forEach(dataset => dataset.data.shift());
+                        }
+
+                        chartInstance.update();
+                    }
+                }
+            } catch (error) {
+                console.error("Ошибка при обновлении данных:", error);
+            }
+        }
+
         async function loadSignals() {
             const signalList = document.getElementById('signal-list');
             signalList.innerHTML = '<div id="loading-state">Загрузка сигналов...</div>';
@@ -457,7 +546,7 @@
                 const res = await fetch(`/api/signals?user_id=${userId}`);
                 const signals = await res.json();
 
-                allSignals = signals; // Сохраняем все сигналы для детального просмотра
+                allSignals = signals;
 
                 if (!signals || signals.length === 0) {
                     signalList.innerHTML = '<div id="loading-state">Сигналов пока нет.</div>';
@@ -471,17 +560,13 @@
             }
         }
 
-        // Функция для рендеринга списка сигналов (экран списка)
         function renderSignalList(signals) {
             const signalList = document.getElementById('signal-list');
             signalList.innerHTML = '';
 
             signals.forEach(s => {
                 const signalItem = document.createElement('div');
-                signalItem.className = 'signal-item card'; // Добавляем класс card
-                signalItem.dataset.pair = s.pair;
-
-                // Используем данные из API для отображения
+                signalItem.className = 'signal-item card';
                 signalItem.innerHTML = `
                     <div class="pair-section" style="padding: 0; margin-bottom: 0; background: none;">
                         <div class="pair-header" style="margin-bottom: 5px;">
@@ -490,55 +575,53 @@
                                     <path fill-rule="evenodd" d="M2 12a10 10 0 1 1 20 0 10 10 0 0 1-20 0Zm9.406-5.5a1 1 0 1 0 0 2h.124a2.51 2.51 0 0 1 2.378 1.488 2.5 2.5 0 1 1 2.766 4.673A2.5 2.5 0 0 1 15 17.5a2.5 2.5 0 0 1-4.99-.21l-.01.21a2.5 2.5 0 0 1-4.707-.417 1 1 0 0 0-1.85.834A4.5 4.5 0 0 0 8 17.5a4.5 4.5 0 0 0 4.29-3.417 4.51 4.51 0 0 0-3.384-5.385 1 1 0 0 0 1.5-1.698Z" clip-rule="evenodd"/>
                                 </svg>
                             </span>
-                            <span class="pair-name">${s.pair}</span>
+                            <span class="pair-name">${s.pair || '—'}</span>
                             <span class="icon-wrap">
-                                <span class="icon-label">${s.signals_count}</span>
+                                <span class="icon-label">${s.signals_count || '—'}</span>
                                 <span class="icon">⚙️</span>
                             </span>
                         </div>
                         <div class="summary-info" style="margin-bottom: 0;">
-                            Суммарная комиссия: <span class="commission-value">${(s.total_commission || 0).toFixed(3)}%</span>
+                            Суммарная комиссия: <span class="commission-value">${s.total_commission !== undefined ? Number(s.total_commission).toFixed(3) : '—'}%</span>
                             <div class="spread-info">
-                                <span>Спред фандинга: <span class="${(s.funding_spread || 0) >= 0 ? 'green' : 'red'}">${(s.funding_spread || 0).toFixed(3)}%</span></span>
-                                <span>Спред входа: <span class="${(s.entry_spread || 0) >= 0 ? 'green' : 'red'}">${(s.entry_spread || 0).toFixed(3)}%</span></span>
-                                <span>Спред выхода: <span class="${(s.exit_spread || 0) >= 0 ? 'green' : 'red'}">${(s.exit_spread || 0).toFixed(3)}%</span></span>
+                                <span>Спред фандинга: <span class="${s.funding_spread >= 0 ? 'green' : 'red'}">${s.funding_spread !== undefined ? Number(s.funding_spread).toFixed(3) : '—'}%</span></span>
+                                <span>Спред входа: <span class="${s.entry_spread >= 0 ? 'green' : 'red'}">${s.entry_spread !== undefined ? Number(s.entry_spread).toFixed(3) : '—'}%</span></span>
+                                <span>Спред выхода: <span class="${s.exit_spread >= 0 ? 'green' : 'red'}">${s.exit_spread !== undefined ? Number(s.exit_spread).toFixed(3) : '—'}%</span></span>
                             </div>
                         </div>
                     </div>
                     <div class="panel-container" style="margin-top: 10px;">
                         <div class="panel left-panel">
                             <div class="panel-header">
-                                <span class="panel-icon-text">↓ S</span> ${s.ex_a.toUpperCase()} фьюч. <span class="panel-icon">🗗</span>
+                                <span class="panel-icon-text">↓ S</span> ${s.ex_a ? s.ex_a.toUpperCase() : '—'} фьюч. <span class="panel-icon">🗗</span>
                             </div>
                             <div class="panel-data">
-                                <div class="data-row">Bid: <span class="data-value">${(s.price_a || 0).toFixed(8)}</span></div>
-                                <div class="data-row">Ask: <span class="data-value">${(s.price_a || 0).toFixed(8)}</span></div>
-                                <div class="data-row">Фандинг: <span class="data-value ${(s.funding_a || 0) >= 0 ? 'green' : 'red'}">${(s.funding_a || 0).toFixed(3)}%</span></div>
+                                <div class="data-row">Bid: <span class="data-value">${s.price_a !== undefined ? Number(s.price_a).toFixed(8) : '—'}</span></div>
+                                <div class="data-row">Ask: <span class="data-value">${s.price_a !== undefined ? Number(s.price_a).toFixed(8) : '—'}</span></div>
+                                <div class="data-row">Фандинг: <span class="data-value ${s.funding_a >= 0 ? 'green' : 'red'}">${s.funding_a !== undefined ? Number(s.funding_a).toFixed(3) : '—'}%</span></div>
                                 <div class="data-row">Время фанд: <span class="data-value">${s.next_funding || '—'}</span></div>
-                                <div class="data-row">Объем USDT 24Ч: <span class="data-value">${((s.vol_a || 0) / 1000000).toFixed(2)}M</span></div>
+                                <div class="data-row">Объем USDT 24Ч: <span class="data-value">${s.vol_a !== undefined ? (Number(s.vol_a) / 1000000).toFixed(2) : '—'}M</span></div>
                             </div>
                         </div>
                         <div class="panel right-panel">
                             <div class="panel-header">
-                                <span class="panel-icon-text">↑ L</span> ${s.ex_b.toUpperCase()} фьюч. <span class="panel-icon">🗗</span>
+                                <span class="panel-icon-text">↑ L</span> ${s.ex_b ? s.ex_b.toUpperCase() : '—'} фьюч. <span class="panel-icon">🗗</span>
                             </div>
                             <div class="panel-data">
-                                <div class="data-row">Bid: <span class="data-value">${(s.price_b || 0).toFixed(8)}</span></div>
-                                <div class="data-row">Ask: <span class="data-value">${(s.price_b || 0).toFixed(8)}</span></div>
-                                <div class="data-row">Фандинг: <span class="data-value ${(s.funding_b || 0) >= 0 ? 'green' : 'red'}">${(s.funding_b || 0).toFixed(3)}%</span></div>
+                                <div class="data-row">Bid: <span class="data-value">${s.price_b !== undefined ? Number(s.price_b).toFixed(8) : '—'}</span></div>
+                                <div class="data-row">Ask: <span class="data-value">${s.price_b !== undefined ? Number(s.price_b).toFixed(8) : '—'}</span></div>
+                                <div class="data-row">Фандинг: <span class="data-value ${s.funding_b >= 0 ? 'green' : 'red'}">${s.funding_b !== undefined ? Number(s.funding_b).toFixed(3) : '—'}%</span></div>
                                 <div class="data-row">Время фанд: <span class="data-value">${s.next_funding || '—'}</span></div>
-                                <div class="data-row">Объем USDT 24Ч: <span class="data-value">${((s.vol_b || 0) / 1000000).toFixed(2)}M</span></div>
+                                <div class="data-row">Объем USDT 24Ч: <span class="data-value">${s.vol_b !== undefined ? (Number(s.vol_b) / 1000000).toFixed(2) : '—'}M</span></div>
                             </div>
                         </div>
                     </div>
                 `;
-                signalList.appendChild(signalItem);
-
                 signalItem.addEventListener('click', () => showScreen('main', s));
+                signalList.appendChild(signalItem);
             });
         }
 
-        // Функция для генерации контента главного экрана (детальный вид)
         function generateMainScreenContent(s) {
             return `
                 <div class="pair-section">
@@ -548,18 +631,18 @@
                                 <path fill-rule="evenodd" d="M2 12a10 10 0 1 1 20 0 10 10 0 0 1-20 0Zm9.406-5.5a1 1 0 1 0 0 2h.124a2.51 2.51 0 0 1 2.378 1.488 2.5 2.5 0 1 1 2.766 4.673A2.5 2.5 0 0 1 15 17.5a2.5 2.5 0 0 1-4.99-.21l-.01.21a2.5 2.5 0 0 1-4.707-.417 1 1 0 0 0-1.85.834A4.5 4.5 0 0 0 8 17.5a4.5 4.5 0 0 0 4.29-3.417 4.51 4.51 0 0 0-3.384-5.385 1 1 0 0 0 1.5-1.698Z" clip-rule="evenodd"/>
                             </svg>
                         </span>
-                        <span class="pair-name">${s.pair}</span>
+                        <span class="pair-name">${s.pair || '—'}</span>
                         <span class="icon-wrap">
-                            <span class="icon-label">${s.signals_count}</span>
+                            <span class="icon-label">${s.signals_count || '—'}</span>
                             <span class="icon">⚙️</span>
                         </span>
                     </div>
                     <div class="summary-info">
-                        Суммарная комиссия: <span class="commission-value">${(s.total_commission || 0).toFixed(3)}%</span>
+                        Суммарная комиссия: <span class="commission-value" id="commission-value">${s.total_commission !== undefined ? Number(s.total_commission).toFixed(3) : '—'}%</span>
                         <div class="spread-info">
-                            <span>Спред фандинга: <span class="${(s.funding_spread || 0) >= 0 ? 'green' : 'red'}">${(s.funding_spread || 0).toFixed(3)}%</span></span>
-                            <span>Спред входа: <span class="${(s.entry_spread || 0) >= 0 ? 'green' : 'red'}">${(s.entry_spread || 0).toFixed(3)}%</span></span>
-                            <span>Спред выхода: <span class="${(s.exit_spread || 0) >= 0 ? 'green' : 'red'}">${(s.exit_spread || 0).toFixed(3)}%</span></span>
+                            <span>Спред фандинга: <span class="${s.funding_spread >= 0 ? 'green' : 'red'}" id="funding-spread">${s.funding_spread !== undefined ? Number(s.funding_spread).toFixed(3) : '—'}%</span></span>
+                            <span>Спред входа: <span class="${s.entry_spread >= 0 ? 'green' : 'red'}" id="entry-spread">${s.entry_spread !== undefined ? Number(s.entry_spread).toFixed(3) : '—'}%</span></span>
+                            <span>Спред выхода: <span class="${s.exit_spread >= 0 ? 'green' : 'red'}" id="exit-spread">${s.exit_spread !== undefined ? Number(s.exit_spread).toFixed(3) : '—'}%</span></span>
                         </div>
                     </div>
                 </div>
@@ -567,26 +650,26 @@
                 <div class="panel-container">
                     <div class="panel left-panel">
                         <div class="panel-header">
-                            <span class="panel-icon-text">↓ S</span> ${s.ex_a.toUpperCase()} фьюч. <span class="panel-icon">🗗</span>
+                            <span class="panel-icon-text">↓ S</span> ${s.ex_a ? s.ex_a.toUpperCase() : '—'} фьюч. <span class="panel-icon">🗗</span>
                         </div>
                         <div class="panel-data">
-                            <div class="data-row">Bid: <span class="data-value">${(s.price_a || 0).toFixed(8)}</span></div>
-                            <div class="data-row">Ask: <span class="data-value">${(s.price_a || 0).toFixed(8)}</span></div>
-                            <div class="data-row">Фандинг: <span class="data-value ${(s.funding_a || 0) >= 0 ? 'green' : 'red'}">${(s.funding_a || 0).toFixed(3)}%</span></div>
+                            <div class="data-row">Bid: <span class="data-value" id="price-a">${s.price_a !== undefined ? Number(s.price_a).toFixed(8) : '—'}</span></div>
+                            <div class="data-row">Ask: <span class="data-value">${s.price_a !== undefined ? Number(s.price_a).toFixed(8) : '—'}</span></div>
+                            <div class="data-row">Фандинг: <span class="data-value ${s.funding_a >= 0 ? 'green' : 'red'}" id="funding-a">${s.funding_a !== undefined ? Number(s.funding_a).toFixed(3) : '—'}%</span></div>
                             <div class="data-row">Время фанд: <span class="data-value">${s.next_funding || '—'}</span></div>
-                            <div class="data-row">Объем USDT 24Ч: <span class="data-value">${((s.vol_a || 0) / 1000000).toFixed(2)}M</span></div>
+                            <div class="data-row">Объем USDT 24Ч: <span class="data-value" id="vol-a">${s.vol_a !== undefined ? (Number(s.vol_a) / 1000000).toFixed(2) : '—'}M</span></div>
                         </div>
                     </div>
                     <div class="panel right-panel">
                         <div class="panel-header">
-                            <span class="panel-icon-text">↑ L</span> ${s.ex_b.toUpperCase()} фьюч. <span class="panel-icon">🗗</span>
+                            <span class="panel-icon-text">↑ L</span> ${s.ex_b ? s.ex_b.toUpperCase() : '—'} фьюч. <span class="panel-icon">🗗</span>
                         </div>
                         <div class="panel-data">
-                            <div class="data-row">Bid: <span class="data-value">${(s.price_b || 0).toFixed(8)}</span></div>
-                            <div class="data-row">Ask: <span class="data-value">${(s.price_b || 0).toFixed(8)}</span></div>
-                            <div class="data-row">Фандинг: <span class="data-value ${(s.funding_b || 0) >= 0 ? 'green' : 'red'}">${(s.funding_b || 0).toFixed(3)}%</span></div>
+                            <div class="data-row">Bid: <span class="data-value" id="price-b">${s.price_b !== undefined ? Number(s.price_b).toFixed(8) : '—'}</span></div>
+                            <div class="data-row">Ask: <span class="data-value">${s.price_b !== undefined ? Number(s.price_b).toFixed(8) : '—'}</span></div>
+                            <div class="data-row">Фандинг: <span class="data-value ${s.funding_b >= 0 ? 'green' : 'red'}" id="funding-b">${s.funding_b !== undefined ? Number(s.funding_b).toFixed(3) : '—'}%</span></div>
                             <div class="data-row">Время фанд: <span class="data-value">${s.next_funding || '—'}</span></div>
-                            <div class="data-row">Объем USDT 24Ч: <span class="data-value">${((s.vol_b || 0) / 1000000).toFixed(2)}M</span></div>
+                            <div class="data-row">Объем USDT 24Ч: <span class="data-value" id="vol-b">${s.vol_b !== undefined ? (Number(s.vol_b) / 1000000).toFixed(2) : '—'}M</span></div>
                         </div>
                     </div>
                 </div>
@@ -597,15 +680,20 @@
                         <canvas id="spreadChart"></canvas>
                     </div>
                     <div class="chart-values">
-                        <div class="value-item exit">Выход <span class="value-number">${(s.price_b || 0).toFixed(2)}</span></div>
-                        <div class="value-item entry">Вход <span class="value-number">${(s.price_a || 0).toFixed(2)}</span></div>
-                        <div class="value-item your-entry">Ваш. вх. <span class="value-number">${(s.spread || 0).toFixed(3)}%</span></div>
+                        <div class="value-item exit">Выход <span class="value-number">${s.price_b !== undefined ? Number(s.price_b).toFixed(2) : '—'}</span></div>
+                        <div class="value-item entry">Вход <span class="value-number">${s.price_a !== undefined ? Number(s.price_a).toFixed(2) : '—'}</span></div>
+                        <div class="value-item your-entry">Ваш. вх. <span class="value-number">${s.spread !== undefined ? Number(s.spread).toFixed(3) : '—'}%</span></div>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="action-btn" onclick="handleEntry()">Вход</button>
+                        <button class="action-btn" onclick="handleExit()">Выход</button>
+                        <button class="action-btn" onclick="handleNotify()">Уведомить</button>
                     </div>
                 </div>
 
                 <footer class="main-footer">
-                    <div class="spread-history-title">${s.pair} - История спредов</div>
-                    <div class="spread-history-subtitle">Биржи: ${s.ex_a.toUpperCase()} и ${s.ex_b.toUpperCase()}</div>
+                    <div class="spread-history-title">${s.pair || '—'} - История спредов</div>
+                    <div class="spread-history-subtitle">Биржи: ${s.ex_a ? s.ex_a.toUpperCase() : '—'} и ${s.ex_b ? s.ex_b.toUpperCase() : '—'}</div>
                     <div class="period-selector">
                         Период: <span>3 дня</span> <span class="nav-icon">⬇️</span>
                     </div>
@@ -613,38 +701,90 @@
             `;
         }
 
-        // Функция для инициализации графика Chart.js
+        function handleEntry() {
+            if (!currentSignalData) return;
+            const entryButton = document.querySelector('.action-btn:nth-child(1)');
+            entryButton.classList.add('green');
+            myEntrySpread = currentSignalData.spread;
+            // Обновляем график с новой точкой входа
+            if (chartInstance) {
+                chartInstance.data.datasets[2].data = chartInstance.data.datasets[2].data.map(() => myEntrySpread);
+                chartInstance.update();
+            }
+            tg.sendData(JSON.stringify({action: 'entry', data: currentSignalData}));
+            tg.showAlert('Вы вошли в сделку.');
+        }
+
+        function handleExit() {
+            if (!currentSignalData) return;
+            const exitButton = document.querySelector('.action-btn:nth-child(2)');
+            exitButton.classList.add('red');
+            if (chartInstance) {
+                chartInstance.destroy();
+                chartInstance = null;
+            }
+            tg.sendData(JSON.stringify({action: 'exit', data: currentSignalData}));
+            tg.showAlert('Вы вышли из сделки. График удален.');
+            // Скрыть график, но оставить остальную информацию
+            document.getElementById('spreadChart').style.display = 'none';
+        }
+
+        function handleNotify() {
+            if (!currentSignalData || myEntrySpread === null) {
+                tg.showAlert('Сначала войдите в сделку!');
+                return;
+            }
+            tg.sendData(JSON.stringify({action: 'notify_me', data: {pair: currentSignalData.pair, entry_spread: myEntrySpread}}));
+            tg.showAlert('Бот уведомит вас, когда спред станет выгодным.');
+        }
+
         function initializeChart(signal) {
             const ctx = document.getElementById('spreadChart');
             if (!ctx) return;
 
-            // Примерные данные для графика (можно заменить на реальные исторические данные)
-            // В данном случае, просто имитируем небольшой флуктуации вокруг спреда
-            const labels = ['12:00', '13:00', '14:00', '15:00', '16:00', '17:00'];
-            const data = labels.map((_, i) => {
-                const baseSpread = signal.spread || 0;
-                // Небольшие случайные изменения для имитации движения
-                return baseSpread + (Math.random() * 0.005 - 0.0025);
-            });
+            const initialLabels = [];
+            const initialEntryData = [];
+            const initialExitData = [];
+            const initialYourEntryData = [];
 
             if (chartInstance) {
-                chartInstance.destroy(); // Уничтожаем предыдущий экземпляр графика
+                chartInstance.destroy();
             }
 
             chartInstance = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Спред',
-                        data: data,
-                        borderColor: varColors.chartLineColor,
-                        backgroundColor: 'rgba(6, 182, 212, 0.2)', // Light fill below the line
-                        borderWidth: 2,
-                        pointRadius: 0, // No points
-                        fill: true,
-                        tension: 0.4
-                    }]
+                    labels: initialLabels,
+                    datasets: [
+                        {
+                            label: 'Выход',
+                            data: initialExitData,
+                            borderColor: getCssVar('--red-color'),
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            tension: 0.4
+                        },
+                        {
+                            label: 'Вход',
+                            data: initialEntryData,
+                            borderColor: getCssVar('--green-color'),
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            tension: 0.4
+                        },
+                        {
+                            label: 'Ваш Вход',
+                            data: initialYourEntryData,
+                            borderColor: getCssVar('--your-entry-color'),
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            tension: 0.4,
+                            borderDash: [5, 5]
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
@@ -658,7 +798,7 @@
                             intersect: false,
                             callbacks: {
                                 label: function(context) {
-                                    return `Спред: ${context.raw.toFixed(3)}%`;
+                                    return `${context.dataset.label}: ${context.raw !== undefined ? Number(context.raw).toFixed(3) : '—'}%`;
                                 }
                             }
                         }
@@ -666,21 +806,21 @@
                     scales: {
                         x: {
                             grid: {
-                                color: varColors.chartGridColor,
+                                color: getCssVar('--chart-grid-color'),
                                 drawBorder: false
                             },
                             ticks: {
-                                color: varColors.chartLabelColor
+                                color: getCssVar('--chart-label-color')
                             }
                         },
                         y: {
                             beginAtZero: false,
                             grid: {
-                                color: varColors.chartGridColor,
+                                color: getCssVar('--chart-grid-color'),
                                 drawBorder: false
                             },
                             ticks: {
-                                color: varColors.chartLabelColor,
+                                color: getCssVar('--chart-label-color'),
                                 callback: function(value) {
                                     return value.toFixed(3) + '%';
                                 }
@@ -691,16 +831,8 @@
             });
         }
 
-        // Helper to get CSS variables
         const getCssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-        const varColors = {
-            chartLineColor: getCssVar('--chart-line-color'),
-            chartGridColor: getCssVar('--chart-grid-color'),
-            chartLabelColor: getCssVar('--chart-label-color')
-        };
 
-
-        // Инициализация при загрузке страницы
         document.addEventListener('DOMContentLoaded', () => {
             loadSignals();
         });
