@@ -7,7 +7,7 @@ from typing import Dict, Any, List
 
 import ccxt
 import requests
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -17,7 +17,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandl
 
 # ================= CONFIG =================
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-PUBLIC_URL = os.environ.get("PUBLIC_URL", "")  # например https://arb-bot.up.railway.app
+PUBLIC_URL = os.environ.get("PUBLIC_URL", "")
 
 if not TELEGRAM_BOT_TOKEN or not PUBLIC_URL:
     raise RuntimeError("❌ Set TELEGRAM_BOT_TOKEN and PUBLIC_URL environment variables!")
@@ -130,7 +130,7 @@ def load_futures_markets(ex):
             symbols.append(symbol)
             if base not in base_map:
                 base_map[base] = m
-    return {"base_map": base_map, "symbols": symbols}
+    return {"base_map": base_map, "symbols": []}
 
 def fetch_prices(ex, base_map, symbols):
     result = {}
@@ -268,8 +268,12 @@ async def health():
 # ================= TELEGRAM WEBHOOK =================
 @app.post(WEBHOOK_PATH)
 async def telegram_webhook(request: Request):
+    if request.headers.get("x-telegram-bot-api-secret-token") != "your_secret_token_here":
+        raise HTTPException(status_code=403, detail="Forbidden")
+
     data = await request.json()
-    await TELE_BOT_APP.update_queue.put(Update.de_json(data, TELE_BOT_APP.bot))
+    update = Update.de_json(data, TELE_BOT_APP.bot)
+    await TELE_BOT_APP.process_update(update)
     return {"ok": True}
 
 # ================= STARTUP =================
@@ -277,9 +281,14 @@ async def telegram_webhook(request: Request):
 def startup_event():
     threading.Thread(target=fetcher_loop, daemon=True).start()
 
-    # Установить webhook при старте
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setWebhook"
-    resp = requests.post(url, data={"url": WEBHOOK_URL})
+    resp = requests.post(
+        url,
+        data={
+            "url": WEBHOOK_URL,
+            "secret_token": "your_secret_token_here"
+        }
+    )
     print("[telegram] setWebhook:", resp.json())
 
     print(f"[app] startup done; fetcher started, webhook registered at {WEBHOOK_URL}")
