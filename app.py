@@ -227,6 +227,8 @@ def fetcher_loop():
 
 # ================= TELEGRAM BOT =================
 TELE_BOT_APP = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+# This line is the fix for the RuntimeError
+TELE_BOT_APP.initialize()
 
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -289,17 +291,11 @@ async def health():
 # ================= TELEGRAM WEBHOOK =================
 @app.post(WEBHOOK_PATH)
 async def telegram_webhook(request: Request):
-    # Добавлена проверка секретного токена для безопасности.
-    # Убедитесь, что TELEGRAM_WEBHOOK_SECRET установлен в Railway.
     secret_token = os.environ.get("TELEGRAM_WEBHOOK_SECRET")
     if secret_token and request.headers.get("x-telegram-bot-api-secret-token") != secret_token:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    # Получаем сырые JSON-данные из запроса.
     data = await request.json()
-
-    # Правильный способ передачи данных вебхука в Application.
-    # Метод `process_update` ожидает объект `Update`.
     update = Update.de_json(data, TELE_BOT_APP.bot)
     await TELE_BOT_APP.process_update(update)
 
