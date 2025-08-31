@@ -354,6 +354,7 @@
         .signal-list .signal-item:active {
              background-color: rgba(255,255,255,0.05); /* Visual feedback on tap */
         }
+
     </style>
 </head>
 <body>
@@ -436,6 +437,45 @@
 
                 // Инициализация графика после вставки HTML
                 initializeChart(signalData);
+
+                // Добавление обработчиков событий для новых кнопок
+                // Кнопка "Войти" (зеленая)
+                document.getElementById('enterTradeBtn').addEventListener('click', () => {
+                    const entryPriceA = signalData.price_a;
+                    const entryPriceB = signalData.price_b;
+                    // Отправляем данные боту о входе
+                    tg.sendData(JSON.stringify({
+                        action: 'enter_trade',
+                        pair: signalData.pair,
+                        entry_price_a: entryPriceA,
+                        entry_price_b: entryPriceB
+                    }));
+                    tg.showAlert(`✅ Вы зашли в сделку по ценам:\n${signalData.ex_a}: ${entryPriceA.toFixed(8)}\n${signalData.ex_b}: ${entryPriceB.toFixed(8)}`);
+                });
+
+                // Кнопка "Выйти" (красная)
+                document.getElementById('exitTradeBtn').addEventListener('click', () => {
+                    // Отправляем данные боту о выходе
+                    tg.sendData(JSON.stringify({
+                        action: 'exit_trade',
+                        pair: signalData.pair
+                    }));
+                    tg.showAlert(`🚪 Вы вышли из сделки.`);
+                    showScreen('list');
+                });
+
+                // Кнопка "Напомнить" (фиолетовая)
+                document.getElementById('warnMeBtn').addEventListener('click', () => {
+                    const entrySpread = signalData.spread;
+                    // Отправляем боту запрос на уведомление
+                    tg.sendData(JSON.stringify({
+                        action: 'set_reminder',
+                        pair: signalData.pair,
+                        entry_spread: entrySpread
+                    }));
+                    tg.showAlert(`🔔 Бот будет следить за спредом и напомнит вам выйти, когда спред станет выше вашей точки входа (${entrySpread.toFixed(3)}%).`);
+                });
+
             } else if (screenId === 'list') {
                 mainScreen.classList.add('hidden');
                 listScreen.classList.remove('hidden');
@@ -453,8 +493,8 @@
             signalList.innerHTML = '<div id="loading-state">Загрузка сигналов...</div>';
 
             try {
-                const userId = tg.initDataUnsafe.user.id;
-                const res = await fetch(`/api/signals?user_id=${userId}`);
+                // Предполагается, что ваш серверный API доступен по этому адресу
+                const res = await fetch('/api/signals');
                 const signals = await res.json();
 
                 allSignals = signals; // Сохраняем все сигналы для детального просмотра
@@ -532,8 +572,6 @@
                         </div>
                     </div>
                 `;
-                signalList.appendChild(signalItem);
-
                 signalItem.addEventListener('click', () => showScreen('main', s));
             });
         }
@@ -591,6 +629,18 @@
                     </div>
                 </div>
 
+                <div style="display: flex; justify-content: space-between; margin-bottom: 10px; gap: 10px;">
+                    <button id="enterTradeBtn" style="flex: 1; padding: 10px; border-radius: 8px; border: none; background-color: var(--green-color); color: white; font-weight: bold; cursor: pointer;">
+                        Войти
+                    </button>
+                    <button id="exitTradeBtn" style="flex: 1; padding: 10px; border-radius: 8px; border: none; background-color: var(--red-color); color: white; font-weight: bold; cursor: pointer;">
+                        Выйти
+                    </button>
+                    <button id="warnMeBtn" style="flex: 1; padding: 10px; border-radius: 8px; border: none; background-color: var(--purple-color); color: white; font-weight: bold; cursor: pointer;">
+                        Напомнить
+                    </button>
+                </div>
+
                 <div class="chart-section">
                     <div class="status">Статус: <span class="online">Онлайн</span></div>
                     <div class="chart-placeholder">
@@ -619,7 +669,6 @@
             if (!ctx) return;
 
             // Примерные данные для графика (можно заменить на реальные исторические данные)
-            // В данном случае, просто имитируем небольшой флуктуации вокруг спреда
             const labels = ['12:00', '13:00', '14:00', '15:00', '16:00', '17:00'];
             const data = labels.map((_, i) => {
                 const baseSpread = signal.spread || 0;
