@@ -160,7 +160,9 @@ def fetch_prices(ex, base_map, symbols):
         ask = safe_float(t.get("ask"))
         vol = safe_float(t.get("quoteVolume")) or safe_float(t.get("baseVolume")) or 0
         funding_rate = safe_float(t.get("fundingRate"))
-        if last:
+
+        # Убедимся, что все данные присутствуют
+        if last is not None and bid is not None and ask is not None and funding_rate is not None:
             result[base] = {"last": last, "bid": bid, "ask": ask}
             volumes[base] = vol
             funding_rates[base] = funding_rate
@@ -168,27 +170,24 @@ def fetch_prices(ex, base_map, symbols):
 
 
 def calculate_spreads(signal):
-    price_a_data = signal.get('price_a', {})
-    price_b_data = signal.get('price_b', {})
-
-    price_a_last = price_a_data.get('last', 0)
-    price_b_last = price_b_data.get('last', 0)
+    bid_price = signal.get('bid_price', 0)
+    ask_price = signal.get('ask_price', 0)
 
     funding_a = signal.get('funding_a', 0)
     funding_b = signal.get('funding_b', 0)
 
-    if price_a_last > 0:
-        spread = ((price_b_last - price_a_last) / price_a_last) * 100
+    # Расчет спреда по твоей логике: (Bid - Ask) / Ask
+    if ask_price > 0:
+        spread = ((bid_price - ask_price) / ask_price) * 100
     else:
         spread = 0
 
     # Расчет спредов
     funding_spread = (funding_b - funding_a) * 100
-    entry_spread = spread * 1.1 + COMMISSION * 100 * 2
-    exit_spread = spread * 0.9 - COMMISSION * 100 * 2
+    entry_spread = spread - COMMISSION * 100 * 2
+    exit_spread = entry_spread - 0.005  # Примерное значение, можно настроить
     total_commission = COMMISSION * 2 * 100
 
-    # Добавляем все рассчитанные значения в сигнал
     return {
         **signal,
         'spread': spread,
@@ -226,18 +225,12 @@ def fetcher_loop():
             for i in range(len(ex_ids)):
                 for j in range(i + 1, len(ex_ids)):
                     a, b = ex_ids[i], ex_ids[j]
-                    commons = set(markets_info[a]["base_map"].keys()) & set(markets_info[b]["base_map"].keys())
+                    commons = set(prices_cache[a].keys()) & set(prices_cache[b].keys())
 
                     if not commons:
-                        print(f"[fetcher] Нет общих пар между {a} и {b}")
                         continue
 
                     for base in commons:
-                        ma = markets_info[a]["base_map"].get(base)
-                        mb = markets_info[b]["base_map"].get(base)
-                        if not ma or not mb: continue
-                        if ma.get("quote") != QUOTE or mb.get("quote") != QUOTE: continue
-
                         pa = prices_cache[a].get(base)
                         pb = prices_cache[b].get(base)
 
@@ -247,39 +240,55 @@ def fetcher_loop():
                         va = volumes_cache[a].get(base, 0)
                         vb = volumes_cache[b].get(base, 0)
 
-                        if not pa or not pb or fa is None or fb is None:
-                            continue
+                        # Проверка 1: short A, long B
+                        bid_a = pa.get('bid')
+                        ask_b = pb.get('ask')
 
-                        price_a_last = pa.get("last")
-                        price_b_last = pb.get("last")
+                        if bid_a is not None and ask_b is not None and bid_a > ask_b:
+                            spread_val = pct(bid_a, ask_b)
+                            if SPREAD_THRESHOLD_MIN <= spread_val <= SPREAD_THRESHOLD_MAX:
+                                next_fund = next_funding_time()
+                                signal_data = {
+                                    "pair": f"{base}/{QUOTE}",
+                                    "short_ex": a,
+                                    "long_ex": b,
+                                    "price_a": pa,
+                                    "price_b": pb,
+                                    "vol_a": va,
+                                    "vol_b": vb,
+                                    "funding_a": fa,
+                                    "funding_b": fb,
+                                    "bid_price": bid_a,
+                                    "ask_price": ask_b,
+                                    "next_funding": next_fund.isoformat()
+                                }
+                                full_signal = calculate_spreads(signal_data)
+                                local_signals.append(full_signal)
 
-                        if not price_a_last or not price_b_last:
-                            continue
+                        # Проверка 2: short B, long A
+                        bid_b = pb.get('bid')
+                        ask_a = pa.get('ask')
 
-                        sp = pct(price_a_last, price_b_last)
-
-                        if sp is None or sp < SPREAD_THRESHOLD_MIN or sp > SPREAD_THRESHOLD_MAX:
-                            continue
-
-                        next_fund = next_funding_time()
-
-                        signal_data = {
-                            "pair": f"{base}/{QUOTE}",
-                            "ex_a": a,
-                            "ex_b": b,
-                            "price_a": pa,
-                            "price_b": pb,
-                            "vol_a": va,
-                            "vol_b": vb,
-                            "funding_a": fa,
-                            "funding_b": fb,
-                            "spread": sp,
-                            "next_funding": next_fund.isoformat()
-                        }
-
-                        # Расчет всех спредов
-                        full_signal = calculate_spreads(signal_data)
-                        local_signals.append(full_signal)
+                        if bid_b is not None and ask_a is not None and bid_b > ask_a:
+                            spread_val = pct(bid_b, ask_a)
+                            if SPREAD_THRESHOLD_MIN <= spread_val <= SPREAD_THRESHOLD_MAX:
+                                next_fund = next_funding_time()
+                                signal_data = {
+                                    "pair": f"{base}/{QUOTE}",
+                                    "short_ex": b,
+                                    "long_ex": a,
+                                    "price_a": pb,
+                                    "price_b": pa,
+                                    "vol_a": vb,
+                                    "vol_b": va,
+                                    "funding_a": fb,
+                                    "funding_b": fa,
+                                    "bid_price": bid_b,
+                                    "ask_price": ask_a,
+                                    "next_funding": next_fund.isoformat()
+                                }
+                                full_signal = calculate_spreads(signal_data)
+                                local_signals.append(full_signal)
 
             local_signals.sort(key=lambda x: -x.get("spread", 0))
             with SIGNALS_LOCK:
