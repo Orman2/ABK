@@ -68,6 +68,15 @@
             padding: 0;
         }
 
+        .app-header .icon-btn svg {
+             width: 24px;
+             height: 24px;
+             stroke: var(--secondary-text-color);
+             stroke-width: 2;
+             fill: none;
+        }
+
+
         .app-header .search-bar {
             flex-grow: 1;
             margin: 0 10px;
@@ -137,6 +146,12 @@
             width: 1.5em;
             height: 1.5em;
         }
+
+        .pair-icon svg {
+             width: 1.5em;
+             height: 1.5em;
+        }
+
 
         .pair-name {
             font-size: 18px;
@@ -306,7 +321,7 @@
             margin-bottom: 10px;
         }
 
-        .signal-list .pair-section {
+        .signal-list .signal-item {
             cursor: pointer;
         }
     </style>
@@ -317,13 +332,13 @@
         <div id="main-screen" class="hidden">
             <header class="app-header">
                 <button class="icon-btn" onclick="showScreen('list')">
-                    <svg class="w-6 h-6" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
+                    <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
                         <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19-7-7 7-7"/>
                     </svg>
                 </button>
                 <h1 class="header-title">Концентрация Бот | Кри...</h1>
                 <button class="icon-btn">
-                    <svg class="w-6 h-6" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
+                    <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
                         <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0 0c3.866 0 7-3.134 7-7a7 7 0 0 0-7-7c-3.866 0-7 3.134-7 7a7 7 0 0 0 7 7Zm0 0V3"/>
                     </svg>
                 </button>
@@ -334,17 +349,13 @@
 
         <div id="list-screen">
             <header class="app-header">
-                <button class="icon-btn">
-                    <svg class="w-6 h-6" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
-                        <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m15 19-7-7 7-7"/>
-                    </svg>
-                </button>
+                <button class="icon-btn" onclick="tg.close()">Закрыть</button>
                 <div class="search-bar">
                     <input type="text" placeholder="Введите название монеты">
                 </div>
                 <button class="icon-btn">
-                    <svg class="w-6 h-6" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
-                        <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m15 19-7-7 7-7"/>
+                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
+                        <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19-7-7 7-7"/>
                     </svg>
                 </button>
             </header>
@@ -431,10 +442,15 @@
                 signalItem.className = 'signal-item';
                 signalItem.dataset.pair = s.pair; // Сохраняем пару для поиска
 
+                // Вставляем HTML-код с данными из API
                 signalItem.innerHTML = `
                     <div class="pair-section">
                         <div class="pair-header">
-                            <span class="pair-icon">GOAT</span>
+                            <span class="pair-icon">
+                                <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+                                    <path fill-rule="evenodd" d="M2 12a10 10 0 1 1 20 0 10 10 0 0 1-20 0Zm9.406-5.5a1 1 0 1 0 0 2h.124a2.51 2.51 0 0 1 2.378 1.488 2.5 2.5 0 1 1 2.766 4.673A2.5 2.5 0 0 1 15 17.5a2.5 2.5 0 0 1-4.99-.21l-.01.21a2.5 2.5 0 0 1-4.707-.417 1 1 0 0 0-1.85.834A4.5 4.5 0 0 0 8 17.5a4.5 4.5 0 0 0 4.29-3.417 4.51 4.51 0 0 0-3.384-5.385 1 1 0 0 0 1.5-1.698Z" clip-rule="evenodd"/>
+                                </svg>
+                            </span>
                             <span class="pair-name">${s.pair}</span>
                             <span class="icon-wrap">
                                 <span class="icon-label">${s.signals_count}</span>
@@ -444,35 +460,35 @@
                         <div class="summary-info">
                             Суммарная комиссия: <span class="commission-value">${Number(s.total_commission).toFixed(3)}%</span>
                             <div class="spread-info">
-                                <span>Спред фандинга: <span class="${s.funding_spread > 0 ? 'green' : 'red'}">${Number(s.funding_spread).toFixed(3)}%</span></span>
-                                <span>Спред входа: <span class="${s.entry_spread > 0 ? 'green' : 'red'}">${Number(s.entry_spread).toFixed(3)}%</span></span>
-                                <span>Спред выхода: <span class="${s.exit_spread > 0 ? 'green' : 'red'}">${Number(s.exit_spread).toFixed(3)}%</span></span>
+                                <span>Спред фандинга: <span class="${s.funding_spread >= 0 ? 'green' : 'red'}">${Number(s.funding_spread).toFixed(3)}%</span></span>
+                                <span>Спред входа: <span class="${s.entry_spread >= 0 ? 'green' : 'red'}">${Number(s.entry_spread).toFixed(3)}%</span></span>
+                                <span>Спред выхода: <span class="${s.exit_spread >= 0 ? 'green' : 'red'}">${Number(s.exit_spread).toFixed(3)}%</span></span>
                             </div>
                         </div>
                     </div>
                     <div class="panel-container">
                         <div class="panel left-panel">
                             <div class="panel-header">
-                                <span class="panel-icon-text">↓ S</span> ${s.ex_a_name} <span class="panel-icon">🗗</span>
+                                <span class="panel-icon-text">↓ S</span> ${s.ex_a.toUpperCase()} фьюч. <span class="panel-icon">🗗</span>
                             </div>
                             <div class="panel-data">
-                                <div class="data-row">Bid: <span class="data-value">${Number(s.ex_a_bid).toFixed(8)}</span></div>
-                                <div class="data-row">Ask: <span class="data-value">${Number(s.ex_a_ask).toFixed(8)}</span></div>
-                                <div class="data-row">Фандинг: <span class="data-value ${s.ex_a_funding_rate > 0 ? 'green' : 'red'}">${Number(s.ex_a_funding_rate).toFixed(3)}%</span></div>
-                                <div class="data-row">Время фанд: <span class="data-value">${s.ex_a_funding_time}</span></div>
-                                <div class="data-row">Объем USDT 24Ч: <span class="data-value">${Number(s.ex_a_volume_24h / 1000000).toFixed(2)}M</span></div>
+                                <div class="data-row">Bid: <span class="data-value">${Number(s.price_a).toFixed(8)}</span></div>
+                                <div class="data-row">Ask: <span class="data-value">${Number(s.price_a).toFixed(8)}</span></div>
+                                <div class="data-row">Фандинг: <span class="data-value ${s.funding_a >= 0 ? 'green' : 'red'}">${Number(s.funding_a).toFixed(3)}%</span></div>
+                                <div class="data-row">Время фанд: <span class="data-value">${s.next_funding}</span></div>
+                                <div class="data-row">Объем USDT 24Ч: <span class="data-value">${Number(s.vol_a).toFixed(2)}M</span></div>
                             </div>
                         </div>
                         <div class="panel right-panel">
                             <div class="panel-header">
-                                <span class="panel-icon-text">↑ L</span> ${s.ex_b_name} <span class="panel-icon">🗗</span>
+                                <span class="panel-icon-text">↑ L</span> ${s.ex_b.toUpperCase()} фьюч. <span class="panel-icon">🗗</span>
                             </div>
                             <div class="panel-data">
-                                <div class="data-row">Bid: <span class="data-value">${Number(s.ex_b_bid).toFixed(8)}</span></div>
-                                <div class="data-row">Ask: <span class="data-value">${Number(s.ex_b_ask).toFixed(8)}</span></div>
-                                <div class="data-row">Фандинг: <span class="data-value ${s.ex_b_funding_rate > 0 ? 'green' : 'red'}">${Number(s.ex_b_funding_rate).toFixed(3)}%</span></div>
-                                <div class="data-row">Время фанд: <span class="data-value">${s.ex_b_funding_time}</span></div>
-                                <div class="data-row">Объем USDT 24Ч: <span class="data-value">${Number(s.ex_b_volume_24h / 1000000).toFixed(2)}M</span></div>
+                                <div class="data-row">Bid: <span class="data-value">${Number(s.price_b).toFixed(8)}</span></div>
+                                <div class="data-row">Ask: <span class="data-value">${Number(s.price_b).toFixed(8)}</span></div>
+                                <div class="data-row">Фандинг: <span class="data-value ${s.funding_b >= 0 ? 'green' : 'red'}">${Number(s.funding_b).toFixed(3)}%</span></div>
+                                <div class="data-row">Время фанд: <span class="data-value">${s.next_funding}</span></div>
+                                <div class="data-row">Объем USDT 24Ч: <span class="data-value">${Number(s.vol_b).toFixed(2)}M</span></div>
                             </div>
                         </div>
                     </div>
@@ -488,7 +504,11 @@
             return `
                 <div class="pair-section">
                     <div class="pair-header">
-                        <span class="pair-icon">GOAT</span>
+                        <span class="pair-icon">
+                            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+                                <path fill-rule="evenodd" d="M2 12a10 10 0 1 1 20 0 10 10 0 0 1-20 0Zm9.406-5.5a1 1 0 1 0 0 2h.124a2.51 2.51 0 0 1 2.378 1.488 2.5 2.5 0 1 1 2.766 4.673A2.5 2.5 0 0 1 15 17.5a2.5 2.5 0 0 1-4.99-.21l-.01.21a2.5 2.5 0 0 1-4.707-.417 1 1 0 0 0-1.85.834A4.5 4.5 0 0 0 8 17.5a4.5 4.5 0 0 0 4.29-3.417 4.51 4.51 0 0 0-3.384-5.385 1 1 0 0 0 1.5-1.698Z" clip-rule="evenodd"/>
+                            </svg>
+                        </span>
                         <span class="pair-name">${s.pair}</span>
                         <span class="icon-wrap">
                             <span class="icon-label">${s.signals_count}</span>
@@ -498,9 +518,9 @@
                     <div class="summary-info">
                         Суммарная комиссия: <span class="commission-value">${Number(s.total_commission).toFixed(3)}%</span>
                         <div class="spread-info">
-                            <span>Спред фандинга: <span class="${s.funding_spread > 0 ? 'green' : 'red'}">${Number(s.funding_spread).toFixed(3)}%</span></span>
-                            <span>Спред входа: <span class="${s.entry_spread > 0 ? 'green' : 'red'}">${Number(s.entry_spread).toFixed(3)}%</span></span>
-                            <span>Спред выхода: <span class="${s.exit_spread > 0 ? 'green' : 'red'}">${Number(s.exit_spread).toFixed(3)}%</span></span>
+                            <span>Спред фандинга: <span class="${s.funding_spread >= 0 ? 'green' : 'red'}">${Number(s.funding_spread).toFixed(3)}%</span></span>
+                            <span>Спред входа: <span class="${s.entry_spread >= 0 ? 'green' : 'red'}">${Number(s.entry_spread).toFixed(3)}%</span></span>
+                            <span>Спред выхода: <span class="${s.exit_spread >= 0 ? 'green' : 'red'}">${Number(s.exit_spread).toFixed(3)}%</span></span>
                         </div>
                     </div>
                 </div>
@@ -508,26 +528,26 @@
                 <div class="panel-container">
                     <div class="panel left-panel">
                         <div class="panel-header">
-                            <span class="panel-icon-text">↓ S</span> ${s.ex_a_name} <span class="panel-icon">🗗</span>
+                            <span class="panel-icon-text">↓ S</span> ${s.ex_a.toUpperCase()} фьюч. <span class="panel-icon">🗗</span>
                         </div>
                         <div class="panel-data">
-                            <div class="data-row">Bid: <span class="data-value">${Number(s.ex_a_bid).toFixed(8)}</span></div>
-                            <div class="data-row">Ask: <span class="data-value">${Number(s.ex_a_ask).toFixed(8)}</span></div>
-                            <div class="data-row">Фандинг: <span class="data-value ${s.ex_a_funding_rate > 0 ? 'green' : 'red'}">${Number(s.ex_a_funding_rate).toFixed(3)}%</span></div>
-                            <div class="data-row">Время фанд: <span class="data-value">${s.ex_a_funding_time}</span></div>
-                            <div class="data-row">Объем USDT 24Ч: <span class="data-value">${Number(s.ex_a_volume_24h / 1000000).toFixed(2)}M</span></div>
+                            <div class="data-row">Bid: <span class="data-value">${Number(s.price_a).toFixed(8)}</span></div>
+                            <div class="data-row">Ask: <span class="data-value">${Number(s.price_a).toFixed(8)}</span></div>
+                            <div class="data-row">Фандинг: <span class="data-value ${s.funding_a >= 0 ? 'green' : 'red'}">${Number(s.funding_a).toFixed(3)}%</span></div>
+                            <div class="data-row">Время фанд: <span class="data-value">${s.next_funding}</span></div>
+                            <div class="data-row">Объем USDT 24Ч: <span class="data-value">${Number(s.vol_a).toFixed(2)}M</span></div>
                         </div>
                     </div>
                     <div class="panel right-panel">
                         <div class="panel-header">
-                            <span class="panel-icon-text">↑ L</span> ${s.ex_b_name} <span class="panel-icon">🗗</span>
+                            <span class="panel-icon-text">↑ L</span> ${s.ex_b.toUpperCase()} фьюч. <span class="panel-icon">🗗</span>
                         </div>
                         <div class="panel-data">
-                            <div class="data-row">Bid: <span class="data-value">${Number(s.ex_b_bid).toFixed(8)}</span></div>
-                            <div class="data-row">Ask: <span class="data-value">${Number(s.ex_b_ask).toFixed(8)}</span></div>
-                            <div class="data-row">Фандинг: <span class="data-value ${s.ex_b_funding_rate > 0 ? 'green' : 'red'}">${Number(s.ex_b_funding_rate).toFixed(3)}%</span></div>
-                            <div class="data-row">Время фанд: <span class="data-value">${s.ex_b_funding_time}</span></div>
-                            <div class="data-row">Объем USDT 24Ч: <span class="data-value">${Number(s.ex_b_volume_24h / 1000000).toFixed(2)}M</span></div>
+                            <div class="data-row">Bid: <span class="data-value">${Number(s.price_b).toFixed(8)}</span></div>
+                            <div class="data-row">Ask: <span class="data-value">${Number(s.price_b).toFixed(8)}</span></div>
+                            <div class="data-row">Фандинг: <span class="data-value ${s.funding_b >= 0 ? 'green' : 'red'}">${Number(s.funding_b).toFixed(3)}%</span></div>
+                            <div class="data-row">Время фанд: <span class="data-value">${s.next_funding}</span></div>
+                            <div class="data-row">Объем USDT 24Ч: <span class="data-value">${Number(s.vol_b).toFixed(2)}M</span></div>
                         </div>
                     </div>
                 </div>
@@ -536,15 +556,15 @@
                     <div class="status">Статус: <span class="online">Онлайн</span></div>
                     <div class="chart-placeholder"></div>
                     <div class="chart-values">
-                        <div class="value-item exit">Выход <span class="value-number">${Number(s.exit_price).toFixed(2)}</span></div>
-                        <div class="value-item entry">Вход <span class="value-number">${Number(s.entry_price).toFixed(2)}</span></div>
-                        <div class="value-item your-entry">Ваш. вх. ${Number(s.user_entry_price).toFixed(3)}%</div>
+                        <div class="value-item exit">Выход <span class="value-number">${Number(s.price_b).toFixed(2)}</span></div>
+                        <div class="value-item entry">Вход <span class="value-number">${Number(s.price_a).toFixed(2)}</span></div>
+                        <div class="value-item your-entry">Ваш. вх. ${Number(s.spread).toFixed(3)}%</div>
                     </div>
                 </div>
 
                 <footer class="main-footer">
                     <div class="spread-history-title">${s.pair} - История спредов</div>
-                    <div class="spread-history-subtitle">Биржи: ${s.ex_a_name} и ${s.ex_b_name}</div>
+                    <div class="spread-history-subtitle">Биржи: ${s.ex_a.toUpperCase()} и ${s.ex_b.toUpperCase()}</div>
                     <div class="period-selector">
                         Период: <span>3 дня</span> <span class="icon">⬇️</span>
                     </div>
