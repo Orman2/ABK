@@ -1,74 +1,197 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="ru">
 <head>
-  <meta charset="utf-8" />
-  <title>Arb MiniApp</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <style>
-    body { font-family: Inter, Roboto, Arial; background:#0f1724; color:#e6eef8; margin:0; padding:20px; }
-    header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
-    h1 { margin:0; font-size:18px; }
-    .card { background:#111827; border-radius:10px; padding:12px; margin-bottom:10px; box-shadow: 0 4px 12px rgba(2,6,23,.6); }
-    .pair { font-weight:700; font-size:16px; }
-    .meta { font-size:13px; color:#9aa6b2; margin-top:6px; }
-    .btn { background:#06b6d4; color:#041025; padding:8px 12px; border-radius:8px; border:none; font-weight:700; cursor:pointer; }
-    #signals { margin-top:8px; }
-    .small { font-size:13px; color:#9aa6b2; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Концентрация Бот</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
-  <header>
-    <h1>🔥 Arbitrage Signals</h1>
-    <div>
-      <button id="refreshBtn" class="btn">Refresh</button>
+    <div id="app-container">
+
+        <div id="main-screen">
+            <header class="app-header">
+                <span class="icon">
+                    <svg class="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
+                        <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m15 19-7-7 7-7"/>
+                    </svg>
+                </span>
+                <h1 class="header-title">Концентрация Бот | Кри...</h1>
+                <span class="icon">
+                    <svg class="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
+                        <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0 0c3.866 0 7-3.134 7-7a7 7 0 0 0-7-7c-3.866 0-7 3.134-7 7a7 7 0 0 0 7 7Zm0 0V3"/>
+                    </svg>
+                </span>
+            </header>
+
+            <main class="main-content">
+                <div class="pair-section">
+                    <div class="pair-header">
+                        <span class="pair-icon">
+                            <svg class="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+                                <path fill-rule="evenodd" d="M2 12a10 10 0 1 1 20 0 10 10 0 0 1-20 0Zm9.406-5.5a1 1 0 1 0 0 2h.124a2.51 2.51 0 0 1 2.378 1.488 2.5 2.5 0 1 1 2.766 4.673A2.5 2.5 0 0 1 15 17.5a2.5 2.5 0 0 1-4.99-.21l-.01.21a2.5 2.5 0 0 1-4.707-.417 1 1 0 0 0-1.85.834A4.5 4.5 0 0 0 8 17.5a4.5 4.5 0 0 0 4.29-3.417 4.51 4.51 0 0 0-3.384-5.385 1 1 0 0 0 1.5-1.698Z" clip-rule="evenodd"/>
+                            </svg>
+                        </span>
+                        <span class="pair-name">GOAT</span>
+                        <span class="icon-wrap">
+                            <span class="icon">💬</span>
+                            <span class="icon">⚙️</span>
+                        </span>
+                    </div>
+                    <div class="summary-info">
+                        Суммарная комиссия: <span class="commission-value">0.007%</span>
+                        <div class="spread-info">
+                            <span>Спред фандинга: <span class="green">0.007%</span></span>
+                            <span>Спред входа: <span class="green">92.255%</span></span>
+                            <span>Спред выхода: <span class="green">92.288%</span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-container">
+                    <div class="panel left-panel">
+                        <div class="panel-header">
+                            <span class="panel-icon-text">↓ S</span>
+                            KuCoin фьюч. <span class="panel-icon">🗗</span>
+                        </div>
+                        <div class="panel-data">
+                            <div class="data-row">Bid: <span class="data-value">0.082660</span></div>
+                            <div class="data-row">Ask: <span class="data-value">0.082730</span></div>
+                            <div class="data-row">Фандинг: <span class="data-value green">0.007%</span></div>
+                            <div class="data-row">Время фанд: <span class="data-value">17:00</span></div>
+                            <div class="data-row">Комиссия: <span class="data-value">—</span></div>
+                            <div class="data-row">Объем USDT 24Ч: <span class="data-value">1.36M</span></div>
+                        </div>
+                    </div>
+                    <div class="panel right-panel">
+                        <div class="panel-header">
+                            <span class="panel-icon-text">↑ L</span>
+                            LBank фьюч. <span class="panel-icon">🗗</span>
+                        </div>
+                        <div class="panel-data">
+                            <div class="data-row">Bid: <span class="data-value">0.006380</span></div>
+                            <div class="data-row">Ask: <span class="data-value">0.006402</span></div>
+                            <div class="data-row">Фандинг: <span class="data-value red">0.000%</span></div>
+                            <div class="data-row">Время фанд: <span class="data-value">17:00</span></div>
+                            <div class="data-row">Комиссия: <span class="data-value">—</span></div>
+                            <div class="data-row">Объем USDT 24Ч: <span class="data-value">812.62K</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chart-section">
+                    <div class="status">Статус: <span class="online">Онлайн</span></div>
+                    <div class="chart-placeholder"></div>
+                    <div class="chart-values">
+                        <div class="value-item exit">Выход <span class="value-number">92.29</span></div>
+                        <div class="value-item entry">Вход <span class="value-number">92.26</span></div>
+                        <div class="value-item your-entry">Ваш. вх. 91.723%</div>
+                    </div>
+                </div>
+            </main>
+
+            <footer class="main-footer">
+                <div class="spread-history-title">GOAT - История спредов</div>
+                <div class="spread-history-subtitle">Биржи: KuCoin фьючерс и LBank фьючерс</div>
+                <div class="period-selector">
+                    Период: <span>3 дня</span> <span class="icon">⬇️</span>
+                </div>
+            </footer>
+        </div>
+
+        <div id="detail-screen" class="hidden">
+            <header class="app-header">
+                <span class="icon">
+                    <svg class="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
+                        <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m15 19-7-7 7-7"/>
+                    </svg>
+                </span>
+                <h1 class="header-title">Концентрация Бот | Кри...</h1>
+                <div class="search-bar">
+                    <input type="text" placeholder="Введите название монеты">
+                </div>
+                <span class="icon">
+                     <svg class="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
+                        <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m15 19-7-7 7-7"/>
+                    </svg>
+                </span>
+            </header>
+
+            <main class="main-content">
+                <div class="sort-bar">
+                    <span class="icon">⬇️</span>
+                    АБК
+                </div>
+                <div class="signal-list">
+                    <div class="signal-item">
+                        <div class="pair-section">
+                            <div class="pair-header">
+                                <span class="pair-icon">
+                                    <svg class="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+                                        <path fill-rule="evenodd" d="M2 12a10 10 0 1 1 20 0 10 10 0 0 1-20 0Zm9.406-5.5a1 1 0 1 0 0 2h.124a2.51 2.51 0 0 1 2.378 1.488 2.5 2.5 0 1 1 2.766 4.673A2.5 2.5 0 0 1 15 17.5a2.5 2.5 0 0 1-4.99-.21l-.01.21a2.5 2.5 0 0 1-4.707-.417 1 1 0 0 0-1.85.834A4.5 4.5 0 0 0 8 17.5a4.5 4.5 0 0 0 4.29-3.417 4.51 4.51 0 0 0-3.384-5.385 1 1 0 0 0 1.5-1.698Z" clip-rule="evenodd"/>
+                                    </svg>
+                                </span>
+                                <span class="pair-name">XPL</span>
+                                <span class="icon-wrap">
+                                    <span class="icon-label">4</span>
+                                    <span class="icon">⚙️</span>
+                                </span>
+                            </div>
+                            <div class="summary-info">
+                                Суммарная комиссия: <span class="commission-value">0.018%</span>
+                                <div class="spread-info">
+                                    <span>Спред фандинга: <span class="green">0.018%</span></span>
+                                    <span>Спред входа: <span class="green">13.692%</span></span>
+                                    <span>Спред выхода: <span class="green">18.256%</span></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="panel-container">
+                            <div class="panel left-panel">
+                                <div class="panel-header">
+                                    <span class="panel-icon-text">↓ S</span> LBank фьюч. <span class="panel-icon">🗗</span>
+                                </div>
+                                <div class="panel-data">
+                                    <div class="data-row">Bid: <span class="data-value">0.79830083</span></div>
+                                    <div class="data-row">Ask: <span class="data-value">0.79949983</span></div>
+                                    <div class="data-row">Фандинг: <span class="data-value green">0.018%</span></div>
+                                    <div class="data-row">Время фанд: <span class="data-value">09:00</span></div>
+                                    <div class="data-row">Комиссия: <span class="data-value">—</span></div>
+                                    <div class="data-row">Объем USDT 24Ч: <span class="data-value">205.63K</span></div>
+                                </div>
+                            </div>
+                            <div class="panel right-panel">
+                                <div class="panel-header">
+                                    <span class="panel-icon-text">↑ L</span> BingX спот <span class="panel-icon">🗗</span>
+                                </div>
+                                <div class="panel-data">
+                                    <div class="data-row">Bid: <span class="data-value">0.65354000</span></div>
+                                    <div class="data-row">Ask: <span class="data-value">0.68900000</span></div>
+                                    <div class="data-row">Фандинг: <span class="data-value red">—</span></div>
+                                    <div class="data-row">Объем USDT 24Ч: <span class="data-value">1.04M</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <nav class="app-nav">
+            <a href="#" class="nav-item">
+                <span class="nav-icon">📊</span>
+                <span class="nav-text">Торговля</span>
+            </a>
+            <a href="#" class="nav-item">
+                <span class="nav-icon">⚙️</span>
+                <span class="nav-text">Настройки</span>
+            </a>
+            <a href="#" class="nav-item">
+                <span class="nav-icon">ℹ️</span>
+                <span class="nav-text">Информация</span>
+            </a>
+        </nav>
     </div>
-  </header>
-
-  <div class="small">MiniApp running inside Telegram. Next funding times shown in UTC.</div>
-
-  <div id="signals">
-    <div class="card">Loading signals…</div>
-  </div>
-
-  <script>
-    const tg = window.Telegram.WebApp;
-    tg.expand();
-
-    async function loadSignals(){
-      try {
-        const res = await fetch("/api/signals");
-        const arr = await res.json();
-        const div = document.getElementById("signals");
-        if (!arr || arr.length === 0) {
-          div.innerHTML = '<div class="card">No signals found right now.</div>';
-          return;
-        }
-        div.innerHTML = "";
-        for (const s of arr) {
-          const el = document.createElement("div");
-          el.className = "card";
-          el.innerHTML = `
-            <div class="pair">${s.pair} — Spread: ${Number(s.spread).toFixed(2)}%</div>
-            <div class="meta">
-              1) ${s.ex_a.toUpperCase()}: ${Number(s.price_a).toPrecision(8)} (${s.vol_a.toFixed(2)}) <br>
-              2) ${s.ex_b.toUpperCase()}: ${Number(s.price_b).toPrecision(8)} (${s.vol_b.toFixed(2)}) <br>
-              Next funding: ${s.next_funding}<br>
-              <small>Estimated Earn (if wallet set): ${s.estimated_earn ? ('$' + Number(s.estimated_earn).toFixed(2)) : '—'}</small>
-            </div>
-          `;
-          div.appendChild(el);
-        }
-      } catch(err){
-        console.error(err);
-        document.getElementById("signals").innerHTML = '<div class="card">Error loading signals.</div>';
-      }
-    }
-
-    document.getElementById("refreshBtn").addEventListener("click", loadSignals);
-
-    // initial load
-    loadSignals();
-  </script>
 </body>
 </html>
