@@ -242,12 +242,11 @@ async def listen_ws(uri, ex_id, subscription_message=None):
                 data = json.loads(message)
 
                 if ex_id == 'binance':
-                    if isinstance(data, list):
-                        for d in data:
-                            if d['e'] == '24hrTicker':
-                                handle_binance_ticker_data(d)
-                            elif d['e'] == 'fundingRate':
-                                handle_binance_funding_data(d)
+                    if isinstance(data, dict):
+                        if data.get('e') == '24hrTicker':
+                            handle_binance_ticker_data(data)
+                        elif data.get('e') == 'fundingRate':
+                            handle_binance_funding_data(data)
                 elif ex_id == 'mexc':
                     if 'channel' in data:
                         if data['channel'] == 'swap@ticker':
@@ -263,7 +262,9 @@ async def listen_ws(uri, ex_id, subscription_message=None):
                             handle_bybit_ticker_data(ticker_data)
                 elif ex_id == 'gateio':
                     if data.get('channel') == 'futures.tickers':
-                        handle_gateio_ticker_data(data.get('result'))
+                        # Исправлено: теперь обработчик принимает 'result' как список
+                        handle_gateio_ticker_data(data.get('result', []))
+
         except websockets.ConnectionClosed:
             print(f"Connection to {ex_id} closed. Reconnecting...")
             continue
@@ -323,8 +324,7 @@ def handle_gateio_ticker_data(data):
         EX_DATA['gateio']['bids'][symbol] = safe_float(ticker_data['highest_bid'])
         EX_DATA['gateio']['asks'][symbol] = safe_float(ticker_data['lowest_ask'])
         EX_DATA['gateio']['funding_rates'][symbol] = safe_float(ticker_data['funding_rate'])
-        # Gate.io provides next_funding_time, but we will use our helper if needed
-        # funding_times[symbol] = safe_float(ticker_data['next_funding_rate_time'])
+        EX_DATA['gateio']['funding_times'][symbol] = safe_float(ticker_data['next_funding_rate_time'])
 
 
 async def fetcher_loop():
