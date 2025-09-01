@@ -58,7 +58,7 @@ def init_db():
         user_id INTEGER,
         exchange TEXT,
         funding_time TEXT,
-        PRIMARY KEY (user_id, exchange)
+        PRIMARY C:\Users\User\PycharmProjects\ArbBotS>KEY (user_id, exchange)
     )""")
     conn.commit()
     return conn
@@ -227,6 +227,8 @@ def calculate_spreads(signal):
 # ================= WEBSOCKET FETCHER =================
 BINANCE_PRICES = {}
 BINANCE_FUNDING = {}
+MEXC_PRICES = {}
+MEXC_FUNDING = {}
 
 
 async def binance_ws_listener():
@@ -237,6 +239,66 @@ async def binance_ws_listener():
     funding_task = asyncio.create_task(listen_ws(uri_funding, 'binance_funding'))
 
     await asyncio.gather(ticker_task, funding_task)
+
+
+async def mexc_ws_listener():
+    # URL для публичных данных MEXC
+    uri = "wss://contract.mexc.com/ws"
+
+    async for ws in websockets.connect(uri):
+        try:
+            # Подписываемся на все тикеры (цены) и фандинг
+            subscribe_message = {
+                "method": "subscription",
+                "params": [
+                    "spot@ticker@all",
+                    "swap@ticker@all",
+                    "swap@funding_rate@all"
+                ]
+            }
+            await ws.send(json.dumps(subscribe_message))
+
+            while True:
+                message = await ws.recv()
+                data = json.loads(message)
+
+                # Обработка данных
+                if 'channel' in data and data['channel'] == 'swap@ticker':
+                    handle_mexc_ticker_data(data['data'])
+                elif 'channel' in data and data['channel'] == 'swap@funding_rate':
+                    handle_mexc_funding_data(data['data'])
+
+        except websockets.ConnectionClosed:
+            print(f"Connection to MEXC closed. Reconnecting...")
+            continue
+        except Exception as e:
+            print(f"Error in MEXC listener: {e}")
+            continue
+
+
+def handle_mexc_ticker_data(data):
+    for symbol, ticker_data in data.items():
+        base = symbol.replace('_USDT', '').replace('USDT_', '').replace('USDT', '')
+        if not base:
+            continue
+
+        MEXC_PRICES[base] = {
+            'bid': float(ticker_data['bid']),
+            'ask': float(ticker_data['ask']),
+            'volume': float(ticker_data['volume24'])
+        }
+
+
+def handle_mexc_funding_data(data):
+    for symbol, funding_data in data.items():
+        base = symbol.replace('_USDT', '').replace('USDT_', '').replace('USDT', '')
+        if not base:
+            continue
+
+        MEXC_FUNDING[base] = {
+            'rate': float(funding_data['fundingRate']),
+            'time': float(funding_data['nextFundingTime'])
+        }
 
 
 async def listen_ws(uri, stream_type):
@@ -285,17 +347,19 @@ def handle_binance_funding_data(data):
 async def fetcher_loop_websocket():
     # Запускаем слушателей веб-сокетов для всех бирж
     asyncio.create_task(binance_ws_listener())
+    asyncio.create_task(mexc_ws_listener())
 
     # Используем CCXT для бирж, которые пока не поддерживают веб-сокеты в нашем коде
-    exchanges_map = {ex_id: init_exchange(ex_id) for ex_id in EX_IDS if ex_id not in ['binance']}
+    exchanges_map = {ex_id: init_exchange(ex_id) for ex_id in EX_IDS if ex_id not in ['binance', 'mexc']}
     markets_info = {ex_id: load_futures_markets(exchanges_map[ex_id]) for ex_id in exchanges_map}
 
     while True:
         try:
             local_signals = []
 
-            # Данные с Binance получаем из кэша
+            # Данные с Binance и MEXC получаем из кэша
             binance_data = {'prices': BINANCE_PRICES, 'funding': BINANCE_FUNDING}
+            mexc_data = {'prices': MEXC_PRICES, 'funding': MEXC_FUNDING}
 
             # Данные с других бирж получаем через CCXT
             other_data = {}
@@ -305,17 +369,17 @@ async def fetcher_loop_websocket():
                 other_data[ex_id] = {'prices': p, 'bids': b, 'asks': a, 'volumes': v, 'funding': f, 'funding_times': t}
 
             # Далее вам нужно будет реализовать логику для поиска связок между всеми биржами.
-            # Например, между Binance и OKX:
+            # Например, между Binance и MEXC
 
-            # commons = set(binance_data['prices'].keys()) & set(okx_data['prices'].keys())
+            # commons = set(binance_data['prices'].keys()) & set(mexc_data['prices'].keys())
             # for base in commons:
             #     ask_a = binance_data['prices'][base]['ask']
-            #     bid_b = okx_data['prices'][base]['bid']
+            #     bid_b = mexc_data['prices'][base]['bid']
             #     ...
 
             # и так далее для всех пар бирж.
 
-            print(f"Binance Tickers: {len(BINANCE_PRICES)}")
+            print(f"Binance Tickers: {len(BINANCE_PRICES)}, MEXC Tickers: {len(MEXC_PRICES)}")
 
             await asyncio.sleep(1)
         except Exception as e:
