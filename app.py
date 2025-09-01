@@ -53,12 +53,12 @@ def init_db():
         user_id INTEGER PRIMARY KEY,
         wallet REAL
     )""")
-    cur.execute("""
+    cur.execute(r"""
     CREATE TABLE IF NOT EXISTS tracking (
         user_id INTEGER,
         exchange TEXT,
         funding_time TEXT,
-        PRIMARY C:\Users\User\PycharmProjects\ArbBotS>KEY (user_id, exchange)
+        PRIMARY KEY (user_id, exchange)
     )""")
     conn.commit()
     return conn
