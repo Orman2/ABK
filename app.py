@@ -232,8 +232,10 @@ EX_DATA = {ex_id: {'bids': {}, 'asks': {}, 'funding_rates': {}, 'funding_times':
 
 
 async def listen_ws(uri, ex_id, subscription_message=None):
+    print(f"[{ex_id}] Attempting to connect to: {uri}")
     async for websocket in websockets.connect(uri):
         try:
+            print(f"[{ex_id}] Connection successful. Sending subscription message...")
             if subscription_message:
                 await websocket.send(json.dumps(subscription_message))
 
@@ -248,7 +250,8 @@ async def listen_ws(uri, ex_id, subscription_message=None):
                         elif data.get('e') == 'fundingRate':
                             handle_binance_funding_data(data)
                 elif ex_id == 'mexc':
-                    if 'channel' in data:
+                    # Проверка на тип данных
+                    if isinstance(data, dict) and 'channel' in data:
                         if data['channel'] == 'swap@ticker':
                             handle_mexc_ticker_data(data['data'])
                         elif data['channel'] == 'swap@funding_rate':
@@ -267,10 +270,10 @@ async def listen_ws(uri, ex_id, subscription_message=None):
                         handle_gateio_ticker_data(data.get('result', []))
 
         except websockets.ConnectionClosed:
-            print(f"Connection to {ex_id} closed. Reconnecting...")
+            print(f"[{ex_id}] Connection to {uri} closed. Reconnecting...")
             continue
         except Exception as e:
-            print(f"Error in {ex_id} listener: {e}")
+            print(f"[{ex_id}] Error in listener: {e}")
             continue
 
 
@@ -335,6 +338,7 @@ async def fetcher_loop():
     # Запускаем слушателей веб-сокетов
     asyncio.create_task(listen_ws("wss://fstream.binance.com/ws/!ticker@arr", "binance"))
     asyncio.create_task(listen_ws("wss://fstream.binance.com/ws/!fundingRate@arr", "binance"))
+    # Исправленный URL-адрес для MEXC
     asyncio.create_task(listen_ws("wss://contract.mexc.com/ws", "mexc",
                                   {"method": "subscription", "params": ["swap@ticker@all", "swap@funding_rate@all"]}))
     asyncio.create_task(listen_ws("wss://fstream-ws.bingx.com/ws/V1_ticker", "bingx",
