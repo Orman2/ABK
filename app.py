@@ -229,51 +229,55 @@ def calculate_spreads(signal):
 
 # ================= WEBSOCKET FETCHER =================
 EX_DATA = {ex_id: {'bids': {}, 'asks': {}, 'funding_rates': {}, 'funding_times': {}} for ex_id in EX_IDS}
+EX_WS_STATUS = {ex_id: "active" for ex_id in WS_EX_IDS}
 
 
 async def listen_ws(uri, ex_id, subscription_message=None):
-    print(f"[{ex_id}] Attempting to connect to: {uri}")
-    async for websocket in websockets.connect(uri):
+    while EX_WS_STATUS[ex_id] != "disabled":
         try:
-            print(f"[{ex_id}] Connection successful. Sending subscription message...")
-            if subscription_message:
-                await websocket.send(json.dumps(subscription_message))
+            async with websockets.connect(uri) as websocket:
+                print(f"[{ex_id}] Connection successful. Sending subscription message...")
+                EX_WS_STATUS[ex_id] = "active"
+                if subscription_message:
+                    await websocket.send(json.dumps(subscription_message))
 
-            while True:
-                message = await websocket.recv()
-                data = json.loads(message)
+                while True:
+                    message = await websocket.recv()
+                    data = json.loads(message)
 
-                if ex_id == 'binance':
-                    if isinstance(data, dict):
-                        if data.get('e') == '24hrTicker':
-                            handle_binance_ticker_data(data)
-                        elif data.get('e') == 'fundingRate':
-                            handle_binance_funding_data(data)
-                elif ex_id == 'mexc':
-                    # Проверка на тип данных
-                    if isinstance(data, dict) and 'channel' in data:
-                        if data['channel'] == 'swap@ticker':
-                            handle_mexc_ticker_data(data['data'])
-                        elif data['channel'] == 'swap@funding_rate':
-                            handle_mexc_funding_data(data['data'])
-                elif ex_id == 'bingx':
-                    if isinstance(data.get('data'), dict) and data.get('dataType') and data['dataType'].startswith(
-                            'ticker'):
-                        for ticker_data in data.get('data', {}).values():
-                            handle_bingx_ticker_data(ticker_data)
-                elif ex_id == 'bybit':
-                    if isinstance(data.get('data'), list) and data.get('topic') and data['topic'].startswith('tickers'):
-                        for ticker_data in data.get('data', []):
-                            handle_bybit_ticker_data(ticker_data)
-                elif ex_id == 'gateio':
-                    if isinstance(data.get('result'), list) and data.get('channel') == 'futures.tickers':
-                        handle_gateio_ticker_data(data.get('result', []))
+                    if ex_id == 'binance':
+                        if isinstance(data, dict):
+                            if data.get('e') == '24hrTicker':
+                                handle_binance_ticker_data(data)
+                            elif data.get('e') == 'fundingRate':
+                                handle_binance_funding_data(data)
+                    elif ex_id == 'mexc':
+                        if isinstance(data, dict) and 'channel' in data:
+                            if data['channel'] == 'swap@ticker':
+                                handle_mexc_ticker_data(data['data'])
+                            elif data['channel'] == 'swap@funding_rate':
+                                handle_mexc_funding_data(data['data'])
+                    elif ex_id == 'bingx':
+                        if isinstance(data.get('data'), dict) and data.get('dataType') and data['dataType'].startswith(
+                                'ticker'):
+                            for ticker_data in data.get('data', {}).values():
+                                handle_bingx_ticker_data(ticker_data)
+                    elif ex_id == 'bybit':
+                        if isinstance(data.get('data'), list) and data.get('topic') and data['topic'].startswith(
+                                'tickers'):
+                            for ticker_data in data.get('data', []):
+                                handle_bybit_ticker_data(ticker_data)
+                    elif ex_id == 'gateio':
+                        if isinstance(data.get('result'), list) and data.get('channel') == 'futures.tickers':
+                            handle_gateio_ticker_data(data.get('result', []))
 
-        except websockets.ConnectionClosed:
-            print(f"[{ex_id}] Connection to {uri} closed. Reconnecting...")
-            continue
+        except websockets.exceptions.InvalidStatus as e:
+            print(f"[{ex_id}] Connection error: {e}. Switching to CCXT for this exchange.")
+            EX_WS_STATUS[ex_id] = "disabled"
+            break
         except Exception as e:
-            print(f"[{ex_id}] Error in listener: {e}")
+            print(f"[{ex_id}] Error in listener: {e}. Reconnecting in 5 seconds...")
+            await asyncio.sleep(5)
             continue
 
 
@@ -331,28 +335,24 @@ def handle_gateio_ticker_data(data_list):
 
 
 async def fetcher_loop():
-    # Инициализация CCXT для бирж, не использующих веб-сокеты
-    exchanges_map = {ex_id: init_exchange(ex_id) for ex_id in CCXT_EX_IDS}
+    exchanges_map = {ex_id: init_exchange(ex_id) for ex_id in EX_IDS}
     markets_info = {ex_id: load_futures_markets(exchanges_map[ex_id]) for ex_id in exchanges_map}
 
     # Запускаем слушателей веб-сокетов
     asyncio.create_task(listen_ws("wss://fstream.binance.com/ws/!ticker@arr", "binance"))
     asyncio.create_task(listen_ws("wss://fstream.binance.com/ws/!fundingRate@arr", "binance"))
-    # Исправленный URL-адрес для MEXC
     asyncio.create_task(listen_ws("wss://contract.mexc.com/ws", "mexc",
                                   {"method": "subscription", "params": ["swap@ticker@all", "swap@funding_rate@all"]}))
     asyncio.create_task(listen_ws("wss://fstream-ws.bingx.com/ws/V1_ticker", "bingx",
                                   {"id": "test", "reqType": "sub", "dataType": "ticker.all"}))
 
-    # Для Bybit и Gate.io нужно сначала получить список символов через CCXT
-    bybit_symbols = [s.replace('USDT', '') for s in load_futures_markets(init_exchange('bybit'))['symbols']]
+    bybit_symbols = [s.replace('USDT', '') for s in markets_info['bybit']['symbols']]
     bybit_topics = [f"tickers.{s}USDT" for s in bybit_symbols]
-    gateio_symbols = [s.replace('_USDT', '') for s in load_futures_markets(init_exchange('gateio'))['symbols']]
-
     bybit_ws_uri = "wss://stream.bybit.com/v5/public/linear"
     bybit_subscription = {"op": "subscribe", "args": bybit_topics}
     asyncio.create_task(listen_ws(bybit_ws_uri, "bybit", bybit_subscription))
 
+    gateio_symbols = [s.replace('_USDT', '') for s in markets_info['gateio']['symbols']]
     gateio_ws_uri = "wss://api.gateio.ws/ws/v4/"
     gateio_subscription = {"time": int(time.time()), "channel": "futures.tickers", "event": "subscribe",
                            "payload": [f"USDT_{s}" for s in gateio_symbols]}
@@ -361,13 +361,18 @@ async def fetcher_loop():
     while True:
         try:
             # Сбор данных со всех источников
-            all_ex_data = {ex_id: EX_DATA[ex_id] for ex_id in WS_EX_IDS}
-
-            # Данные с других бирж получаем через CCXT
-            for ex_id, ex in exchanges_map.items():
-                p, b, a, v, f, t = fetch_market_data(ex, markets_info[ex_id]["base_map"],
-                                                     markets_info[ex_id]["symbols"])
-                all_ex_data[ex_id] = {'bids': b, 'asks': a, 'funding_rates': f, 'funding_times': t}
+            all_ex_data = {}
+            for ex_id in EX_IDS:
+                if ex_id in WS_EX_IDS and EX_WS_STATUS.get(ex_id) == "active":
+                    # Используем данные с веб-сокета
+                    all_ex_data[ex_id] = EX_DATA.get(ex_id, {})
+                else:
+                    # Используем CCXT в качестве резерва или основного источника
+                    ex = exchanges_map.get(ex_id)
+                    info = markets_info.get(ex_id)
+                    if ex and info:
+                        p, b, a, v, f, t = fetch_market_data(ex, info["base_map"], info["symbols"])
+                        all_ex_data[ex_id] = {'bids': b, 'asks': a, 'funding_rates': f, 'funding_times': t}
 
             # Логика для поиска арбитражных связок
             found_signals = []
@@ -383,12 +388,11 @@ async def fetcher_loop():
 
                     if not data_a or not data_b: continue
 
-                    common_bases = set(data_a['bids'].keys()) & set(data_b['bids'].keys())
+                    common_bases = set(data_a.get('bids', {}).keys()) & set(data_b.get('bids', {}).keys())
 
                     for base in common_bases:
-                        # Покупка на A, продажа на B
-                        ask_a = data_a['asks'].get(base)
-                        bid_b = data_b['bids'].get(base)
+                        ask_a = data_a.get('asks', {}).get(base)
+                        bid_b = data_b.get('bids', {}).get(base)
 
                         if ask_a and bid_b:
                             spread_ab = pct(ask_a, bid_b)
@@ -401,14 +405,13 @@ async def fetcher_loop():
                                     'bid_b': bid_b,
                                     'spread': spread_ab,
                                     'direction': f"{ex_a_id} -> {ex_b_id}",
-                                    'funding_a': data_a['funding_rates'].get(base),
-                                    'funding_b': data_b['funding_rates'].get(base),
+                                    'funding_a': data_a.get('funding_rates', {}).get(base),
+                                    'funding_b': data_b.get('funding_rates', {}).get(base),
                                 }
                                 found_signals.append(calculate_spreads(signal_ab))
 
-                        # Покупка на B, продажа на A
-                        ask_b = data_b['asks'].get(base)
-                        bid_a = data_a['bids'].get(base)
+                        ask_b = data_b.get('asks', {}).get(base)
+                        bid_a = data_a.get('bids', {}).get(base)
 
                         if ask_b and bid_a:
                             spread_ba = pct(ask_b, bid_a)
@@ -421,8 +424,8 @@ async def fetcher_loop():
                                     'bid_b': bid_a,
                                     'spread': spread_ba,
                                     'direction': f"{ex_b_id} -> {ex_a_id}",
-                                    'funding_a': data_b['funding_rates'].get(base),
-                                    'funding_b': data_a['funding_rates'].get(base),
+                                    'funding_a': data_b.get('funding_rates', {}).get(base),
+                                    'funding_b': data_a.get('funding_rates', {}).get(base),
                                 }
                                 found_signals.append(calculate_spreads(signal_ba))
 
