@@ -254,15 +254,16 @@ async def listen_ws(uri, ex_id, subscription_message=None):
                         elif data['channel'] == 'swap@funding_rate':
                             handle_mexc_funding_data(data['data'])
                 elif ex_id == 'bingx':
-                    if 'dataType' in data and data['dataType'].startswith('ticker'):
-                        handle_bingx_ticker_data(data)
+                    if isinstance(data.get('data'), dict) and data.get('dataType') and data['dataType'].startswith(
+                            'ticker'):
+                        for ticker_data in data.get('data', {}).values():
+                            handle_bingx_ticker_data(ticker_data)
                 elif ex_id == 'bybit':
-                    if 'topic' in data and data['topic'].startswith('tickers'):
+                    if isinstance(data.get('data'), list) and data.get('topic') and data['topic'].startswith('tickers'):
                         for ticker_data in data.get('data', []):
                             handle_bybit_ticker_data(ticker_data)
                 elif ex_id == 'gateio':
-                    if data.get('channel') == 'futures.tickers':
-                        # Исправлено: теперь обработчик принимает 'result' как список
+                    if isinstance(data.get('result'), list) and data.get('channel') == 'futures.tickers':
                         handle_gateio_ticker_data(data.get('result', []))
 
         except websockets.ConnectionClosed:
@@ -302,12 +303,11 @@ def handle_mexc_funding_data(data):
 
 
 def handle_bingx_ticker_data(data):
-    for ticker_data in data.get('data', []):
-        symbol = ticker_data['symbol'].replace('-USDT', '')
-        EX_DATA['bingx']['bids'][symbol] = safe_float(ticker_data['bidPrice'])
-        EX_DATA['bingx']['asks'][symbol] = safe_float(ticker_data['askPrice'])
-        EX_DATA['bingx']['funding_rates'][symbol] = safe_float(ticker_data['fundingRate'])
-        EX_DATA['bingx']['funding_times'][symbol] = safe_float(ticker_data['nextFundingTime'])
+    symbol = data['symbol'].replace('-USDT', '')
+    EX_DATA['bingx']['bids'][symbol] = safe_float(data['bidPrice'])
+    EX_DATA['bingx']['asks'][symbol] = safe_float(data['askPrice'])
+    EX_DATA['bingx']['funding_rates'][symbol] = safe_float(data['fundingRate'])
+    EX_DATA['bingx']['funding_times'][symbol] = safe_float(data['nextFundingTime'])
 
 
 def handle_bybit_ticker_data(data):
@@ -318,8 +318,8 @@ def handle_bybit_ticker_data(data):
     EX_DATA['bybit']['funding_times'][symbol] = safe_float(data['nextFundingFeeTime'])
 
 
-def handle_gateio_ticker_data(data):
-    for ticker_data in data:
+def handle_gateio_ticker_data(data_list):
+    for ticker_data in data_list:
         symbol = ticker_data['contract'].replace('_USDT', '')
         EX_DATA['gateio']['bids'][symbol] = safe_float(ticker_data['highest_bid'])
         EX_DATA['gateio']['asks'][symbol] = safe_float(ticker_data['lowest_ask'])
