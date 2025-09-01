@@ -16,9 +16,6 @@ from fastapi.templating import Jinja2Templates
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
-# Corrected OKX import
-from okx.websocket.client import WSClient
-
 # ================= CONFIG =================
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 PUBLIC_URL = os.environ.get("PUBLIC_URL", "")
@@ -29,7 +26,7 @@ if not TELEGRAM_BOT_TOKEN or not PUBLIC_URL:
 WEBHOOK_PATH = f"/webhook/{TELEGRAM_BOT_TOKEN}"
 WEBHOOK_URL = PUBLIC_URL.rstrip("/") + WEBHOOK_PATH
 
-EX_IDS = ["binance", "okx", "mexc", "bingx", "gateio", "bybit", "lbank", "kucoin"]
+EX_IDS = ["binance", "mexc", "bingx", "gateio", "bybit", "lbank", "kucoin"]
 QUOTE = "USDT"
 SPREAD_THRESHOLD_MIN = 1.0
 SPREAD_THRESHOLD_MAX = 50.0
@@ -143,7 +140,7 @@ def load_futures_markets(ex):
             symbols.append(symbol)
             if base not in base_map:
                 base_map[base] = m
-    return {"base_map": base_map, "symbols": []}
+    return {"base_map": base_map, "symbols": symbols}
 
 
 def fetch_tickers(ex, symbols):
@@ -230,8 +227,6 @@ def calculate_spreads(signal):
 # ================= WEBSOCKET FETCHER =================
 BINANCE_PRICES = {}
 BINANCE_FUNDING = {}
-OKX_PRICES = {}
-OKX_FUNDING = {}
 
 
 async def binance_ws_listener():
@@ -242,57 +237,6 @@ async def binance_ws_listener():
     funding_task = asyncio.create_task(listen_ws(uri_funding, 'binance_funding'))
 
     await asyncio.gather(ticker_task, funding_task)
-
-
-async def okx_ws_listener():
-    # URL для публичных данных OKX
-    uri = "wss://ws.okx.com:8443/ws/v5/public"
-
-    async with websockets.connect(uri) as ws:
-        # Подписываемся на каналы тикеров (цен) и ставок финансирования
-        subscribe_message = {
-            "op": "subscribe",
-            "args": [
-                {"channel": "tickers", "instType": "SWAP"},
-                {"channel": "funding-rate", "instType": "SWAP"}
-            ]
-        }
-        await ws.send(json.dumps(subscribe_message))
-
-        while True:
-            message = await ws.recv()
-            data = json.loads(message)
-
-            if data.get('event') == 'subscribe':
-                print(f"OKX subscription successful for channels: {data.get('arg', {}).get('channel')}")
-                continue
-
-            if 'data' in data:
-                channel = data.get('arg', {}).get('channel')
-
-                if channel == 'tickers':
-                    handle_okx_ticker_data(data['data'])
-                elif channel == 'funding-rate':
-                    handle_okx_funding_data(data['data'])
-
-
-def handle_okx_ticker_data(data):
-    for d in data:
-        symbol = d['instId'].replace('-USDT-SWAP', '')
-        OKX_PRICES[symbol] = {
-            'bid': float(d['bidPx']),
-            'ask': float(d['askPx']),
-            'volume': float(d['volCcy24h'])
-        }
-
-
-def handle_okx_funding_data(data):
-    for d in data:
-        symbol = d['instId'].replace('-USDT-SWAP', '')
-        OKX_FUNDING[symbol] = {
-            'rate': float(d['fundingRate']),
-            'time': float(d['fundingTime'])
-        }
 
 
 async def listen_ws(uri, stream_type):
@@ -341,19 +285,17 @@ def handle_binance_funding_data(data):
 async def fetcher_loop_websocket():
     # Запускаем слушателей веб-сокетов для всех бирж
     asyncio.create_task(binance_ws_listener())
-    asyncio.create_task(okx_ws_listener())
 
     # Используем CCXT для бирж, которые пока не поддерживают веб-сокеты в нашем коде
-    exchanges_map = {ex_id: init_exchange(ex_id) for ex_id in EX_IDS if ex_id not in ['binance', 'okx']}
+    exchanges_map = {ex_id: init_exchange(ex_id) for ex_id in EX_IDS if ex_id not in ['binance']}
     markets_info = {ex_id: load_futures_markets(exchanges_map[ex_id]) for ex_id in exchanges_map}
 
     while True:
         try:
             local_signals = []
 
-            # Данные с Binance и OKX получаем из кэша
+            # Данные с Binance получаем из кэша
             binance_data = {'prices': BINANCE_PRICES, 'funding': BINANCE_FUNDING}
-            okx_data = {'prices': OKX_PRICES, 'funding': OKX_FUNDING}
 
             # Данные с других бирж получаем через CCXT
             other_data = {}
@@ -373,7 +315,7 @@ async def fetcher_loop_websocket():
 
             # и так далее для всех пар бирж.
 
-            print(f"Binance Tickers: {len(BINANCE_PRICES)}, OKX Tickers: {len(OKX_PRICES)}")
+            print(f"Binance Tickers: {len(BINANCE_PRICES)}")
 
             await asyncio.sleep(1)
         except Exception as e:

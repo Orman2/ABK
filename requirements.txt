@@ -6,4 +6,3 @@ ccxt
 requests
 jinja2
 websockets
-okx-api
