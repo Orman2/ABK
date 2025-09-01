@@ -466,7 +466,7 @@
             const signalList = document.getElementById('signal-list');
             signalList.innerHTML = '';
             signals.forEach(s => {
-                const fundingTime = s.next_funding ? new Date(s.next_funding).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
+                const fundingTime = s.next_funding ? new Date(s.next_funding).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' UTC' : '—';
                 const signalItem = document.createElement('div');
                 signalItem.className = 'signal-item card';
                 signalItem.dataset.pair = s.pair;
@@ -499,8 +499,8 @@
                                 <span class="panel-icon-text">↓ S</span> ${s.ex_a.toUpperCase()} фьюч. <span class="panel-icon">🗗</span>
                             </div>
                             <div class="panel-data">
-                                <div class="data-row">Bid: <span class="data-value">${(s.price_a || 0).toFixed(8)}</span></div>
-                                <div class="data-row">Ask: <span class="data-value">${(s.price_a || 0).toFixed(8)}</span></div>
+                                <div class="data-row">Bid: <span class="data-value">${(s.bid_a || 0).toFixed(8)}</span></div>
+                                <div class="data-row">Ask: <span class="data-value">${(s.ask_a || 0).toFixed(8)}</span></div>
                                 <div class="data-row">Фандинг: <span class="data-value ${(s.funding_a || 0) >= 0 ? 'green' : 'red'}">${(s.funding_a || 0).toFixed(3)}%</span></div>
                                 <div class="data-row">Время: <span class="data-value">${fundingTime}</span></div>
                                 <div class="data-row">Объем: <span class="data-value">${((s.vol_a || 0) / 1000000).toFixed(2)}M</span></div>
@@ -511,8 +511,8 @@
                                 <span class="panel-icon-text">↑ L</span> ${s.ex_b.toUpperCase()} фьюч. <span class="panel-icon">🗗</span>
                             </div>
                             <div class="panel-data">
-                                <div class="data-row">Bid: <span class="data-value">${(s.price_b || 0).toFixed(8)}</span></div>
-                                <div class="data-row">Ask: <span class="data-value">${(s.price_b || 0).toFixed(8)}</span></div>
+                                <div class="data-row">Bid: <span class="data-value">${(s.bid_b || 0).toFixed(8)}</span></div>
+                                <div class="data-row">Ask: <span class="data-value">${(s.ask_b || 0).toFixed(8)}</span></div>
                                 <div class="data-row">Фандинг: <span class="data-value ${(s.funding_b || 0) >= 0 ? 'green' : 'red'}">${(s.funding_b || 0).toFixed(3)}%</span></div>
                                 <div class="data-row">Время: <span class="data-value">${fundingTime}</span></div>
                                 <div class="data-row">Объем: <span class="data-value">${((s.vol_b || 0) / 1000000).toFixed(2)}M</span></div>
@@ -526,7 +526,7 @@
         }
 
         function generateMainScreenContent(s) {
-            const fundingTime = s.next_funding ? new Date(s.next_funding).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
+            const fundingTime = s.next_funding ? new Date(s.next_funding).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' UTC' : '—';
             return `
                 <div class="pair-section">
                     <div class="pair-header">
@@ -557,8 +557,8 @@
                             <span class="panel-icon-text">↓ S</span> ${s.ex_a.toUpperCase()} фьюч. <span class="panel-icon">🗗</span>
                         </div>
                         <div class="panel-data">
-                            <div class="data-row">Bid: <span class="data-value">${(s.price_a || 0).toFixed(8)}</span></div>
-                            <div class="data-row">Ask: <span class="data-value">${(s.price_a || 0).toFixed(8)}</span></div>
+                            <div class="data-row">Bid: <span class="data-value">${(s.bid_a || 0).toFixed(8)}</span></div>
+                            <div class="data-row">Ask: <span class="data-value">${(s.ask_a || 0).toFixed(8)}</span></div>
                             <div class="data-row">Фандинг: <span class="data-value ${(s.funding_a || 0) >= 0 ? 'green' : 'red'}">${(s.funding_a || 0).toFixed(3)}%</span></div>
                             <div class="data-row">Время: <span class="data-value">${fundingTime}</span></div>
                             <div class="data-row">Объем: <span class="data-value">${((s.vol_a || 0) / 1000000).toFixed(2)}M</span></div>
@@ -569,8 +569,8 @@
                             <span class="panel-icon-text">↑ L</span> ${s.ex_b.toUpperCase()} фьюч. <span class="panel-icon">🗗</span>
                         </div>
                         <div class="panel-data">
-                            <div class="data-row">Bid: <span class="data-value">${(s.price_b || 0).toFixed(8)}</span></div>
-                            <div class="data-row">Ask: <span class="data-value">${(s.price_b || 0).toFixed(8)}</span></div>
+                            <div class="data-row">Bid: <span class="data-value">${(s.bid_b || 0).toFixed(8)}</span></div>
+                            <div class="data-row">Ask: <span class="data-value">${(s.ask_b || 0).toFixed(8)}</span></div>
                             <div class="data-row">Фандинг: <span class="data-value ${(s.funding_b || 0) >= 0 ? 'green' : 'red'}">${(s.funding_b || 0).toFixed(3)}%</span></div>
                             <div class="data-row">Время: <span class="data-value">${fundingTime}</span></div>
                             <div class="data-row">Объем: <span class="data-value">${((s.vol_b || 0) / 1000000).toFixed(2)}M</span></div>

@@ -142,46 +142,67 @@ def load_futures_markets(ex):
     return {"base_map": base_map, "symbols": symbols}
 
 
-def fetch_prices(ex, base_map, symbols):
-    result = {}
-    volumes = {}
+def fetch_tickers(ex, symbols):
     try:
-        tickers = ex.fetch_tickers(symbols)
+        return ex.fetch_tickers(symbols)
     except Exception:
-        tickers = {}
+        return {}
+
+
+def fetch_market_data(ex, base_map, symbols):
+    prices = {}
+    bids = {}
+    asks = {}
+    volumes = {}
+    funding_rates = {}
+    funding_times = {}
+
+    tickers = fetch_tickers(ex, symbols)
+
     for base, m in base_map.items():
         sym = m.get("symbol")
-        t = tickers.get(sym) if sym in tickers else None
+        t = tickers.get(sym)
         if not t:
             continue
+
         last = safe_float(t.get("last")) or safe_float(t.get("close"))
+        bid = safe_float(t.get("bid"))
+        ask = safe_float(t.get("ask"))
         vol = safe_float(t.get("quoteVolume")) or safe_float(t.get("baseVolume")) or 0
-        if last:
-            result[base] = last
-            volumes[base] = vol
-    return result, volumes
+        funding_rate = safe_float(t.get("fundingRate"))
+        next_funding_time_ms = safe_float(t.get("info", {}).get("nextFundingTime"))
+
+        if not next_funding_time_ms:
+            next_funding_time_ms = next_funding_time().timestamp() * 1000
+
+        prices[base] = last
+        bids[base] = bid
+        asks[base] = ask
+        volumes[base] = vol
+        funding_rates[base] = funding_rate
+        funding_times[base] = next_funding_time_ms
+
+    return prices, bids, asks, volumes, funding_rates, funding_times
 
 
 def calculate_spreads(signal):
-    price_a = signal.get('price_a', 0)
-    price_b = signal.get('price_b', 0)
-    # Здесь вам нужно получить реальные значения funding_a и funding_b
-    # Пока используем заглушки для демонстрации
-    funding_a = 0.005  # Пример
-    funding_b = 0.003  # Пример
+    funding_a = signal.get('funding_a', 0) * 100
+    funding_b = signal.get('funding_b', 0) * 100
+
+    # Используем Ask биржи А и Bid биржи B для расчета спреда
+    price_a = signal.get('ask_a', 0)
+    price_b = signal.get('bid_b', 0)
 
     if price_a > 0:
         spread = ((price_b - price_a) / price_a) * 100
     else:
         spread = 0
 
-    # Расчет спредов
-    funding_spread = (funding_b - funding_a) * 100
-    entry_spread = spread * 1.1 + COMMISSION * 100 * 2
-    exit_spread = spread * 0.9 - COMMISSION * 100 * 2
+    funding_spread = funding_b - funding_a
+    entry_spread = spread - (COMMISSION * 2 * 100)
+    exit_spread = spread * 0.9 - (COMMISSION * 2 * 100)  # Примерный расчет
     total_commission = COMMISSION * 2 * 100
 
-    # Добавляем все рассчитанные значения в сигнал
     return {
         **signal,
         'funding_a': funding_a,
@@ -204,15 +225,26 @@ def fetcher_loop():
         if ex:
             exchanges_map[ex_id] = ex
             markets_info[ex_id] = load_futures_markets(ex)
+
     while True:
         try:
             local_signals = []
             prices_cache = {}
+            bids_cache = {}
+            asks_cache = {}
             volumes_cache = {}
+            funding_rates_cache = {}
+            funding_times_cache = {}
+
             for ex_id, ex in exchanges_map.items():
-                p, v = fetch_prices(ex, markets_info[ex_id]["base_map"], markets_info[ex_id]["symbols"])
+                p, b, a, v, f, t = fetch_market_data(ex, markets_info[ex_id]["base_map"],
+                                                     markets_info[ex_id]["symbols"])
                 prices_cache[ex_id] = p
+                bids_cache[ex_id] = b
+                asks_cache[ex_id] = a
                 volumes_cache[ex_id] = v
+                funding_rates_cache[ex_id] = f
+                funding_times_cache[ex_id] = t
 
             ex_ids = list(exchanges_map.keys())
             for i in range(len(ex_ids)):
@@ -224,31 +256,47 @@ def fetcher_loop():
                         mb = markets_info[b]["base_map"].get(base)
                         if not ma or not mb: continue
                         if ma.get("quote") != QUOTE or mb.get("quote") != QUOTE: continue
-                        pa = prices_cache[a].get(base)
-                        pb = prices_cache[b].get(base)
-                        va = volumes_cache[a].get(base, 0)
-                        vb = volumes_cache[b].get(base, 0)
-                        if not pa or not pb: continue
-                        sp = pct(pa, pb)
+
+                        bid_a = bids_cache[a].get(base)
+                        ask_a = asks_cache[a].get(base)
+                        bid_b = bids_cache[b].get(base)
+                        ask_b = asks_cache[b].get(base)
+
+                        vol_a = volumes_cache[a].get(base, 0)
+                        vol_b = volumes_cache[b].get(base, 0)
+
+                        funding_a = funding_rates_cache[a].get(base, 0)
+                        funding_b = funding_rates_cache[b].get(base, 0)
+
+                        next_funding_time_ms = funding_times_cache[a].get(base, 0)
+                        next_fund = datetime.utcfromtimestamp(next_funding_time_ms / 1000)
+
+                        # Используем Bid/Ask для расчета спреда
+                        if not ask_a or not bid_b: continue
+
+                        sp = pct(ask_a, bid_b)
                         if sp is None: continue
                         if sp < SPREAD_THRESHOLD_MIN or sp > SPREAD_THRESHOLD_MAX: continue
-                        next_fund = next_funding_time()
+
                         signal_data = {
                             "pair": f"{base}/{QUOTE}",
                             "ex_a": a,
                             "ex_b": b,
-                            "price_a": pa,
-                            "price_b": pb,
-                            "vol_a": va,
-                            "vol_b": vb,
+                            "bid_a": bid_a,
+                            "ask_a": ask_a,
+                            "bid_b": bid_b,
+                            "ask_b": ask_b,
+                            "vol_a": vol_a,
+                            "vol_b": vol_b,
+                            "funding_a": funding_a,
+                            "funding_b": funding_b,
                             "spread": sp,
-                            "next_funding": next_fund.strftime("%Y-%m-%d %H:%M UTC")
+                            "next_funding": next_fund.strftime("%Y-%m-%d %H:%M:%S")
                         }
 
-                        # Расчет всех спредов
                         full_signal = calculate_spreads(signal_data)
-
                         local_signals.append(full_signal)
+
             local_signals.sort(key=lambda x: -x["spread"])
             with SIGNALS_LOCK:
                 SIGNALS = local_signals[:200]
@@ -269,7 +317,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = PUBLIC_URL.rstrip("/") + "/miniapp"
     kb = [[InlineKeyboardButton("📊 Open MiniApp", web_app=WebAppInfo(url=url))]]
     await update.message.reply_text("👋 Здравствуйте!"
-                                    
+
                                     " Arb-bot - арбитражный бот, который показывает спред и готовые связки для арбитража фьючерсов, курсового спреда и фандинга..",
                                     reply_markup=InlineKeyboardMarkup(kb))
 
@@ -306,8 +354,7 @@ async def api_signals(request: Request):
     for s in arr:
         est = None
         if wallet:
-            # Используем уже рассчитанный спред для оценки заработка
-            est = (s.get("spread", 0) / 100) * wallet - (wallet * COMMISSION * 2)
+            est = (s.get("spread", 0) / 100) * wallet
         o = dict(s)
         o["estimated_earn"] = est
         out.append(o)
@@ -327,7 +374,7 @@ async def telegram_webhook(request: Request):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     data = await request.json()
-    update = Update.de_json(data, TELE_BOT_APP.bot)
+    update = Update.to_json(data)
     await TELE_BOT_APP.process_update(update)
 
     return {"ok": True}
