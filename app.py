@@ -172,24 +172,26 @@ def fetch_market_data(ex, base_map, symbols):
         funding_rate = safe_float(t.get("fundingRate"))
         next_funding_time_ms = safe_float(t.get("info", {}).get("nextFundingTime"))
 
-        if not next_funding_time_ms:
+        if next_funding_time_ms is None:
             next_funding_time_ms = next_funding_time().timestamp() * 1000
 
         prices[base] = last
         bids[base] = bid
         asks[base] = ask
         volumes[base] = vol
-        funding_rates[base] = funding_rate
+        funding_rates[base] = funding_rate if funding_rate is not None else 0.0
         funding_times[base] = next_funding_time_ms
 
     return prices, bids, asks, volumes, funding_rates, funding_times
 
 
 def calculate_spreads(signal):
-    funding_a = signal.get('funding_a', 0) * 100
-    funding_b = signal.get('funding_b', 0) * 100
+    funding_a = float(signal.get('funding_a', 0))
+    funding_b = float(signal.get('funding_b', 0))
 
-    # Используем Ask биржи А и Bid биржи B для расчета спреда
+    funding_a_pct = funding_a * 100
+    funding_b_pct = funding_b * 100
+
     price_a = signal.get('ask_a', 0)
     price_b = signal.get('bid_b', 0)
 
@@ -198,15 +200,15 @@ def calculate_spreads(signal):
     else:
         spread = 0
 
-    funding_spread = funding_b - funding_a
+    funding_spread = funding_b_pct - funding_a_pct
     entry_spread = spread - (COMMISSION * 2 * 100)
-    exit_spread = spread * 0.9 - (COMMISSION * 2 * 100)  # Примерный расчет
+    exit_spread = spread * 0.9 - (COMMISSION * 2 * 100)
     total_commission = COMMISSION * 2 * 100
 
     return {
         **signal,
-        'funding_a': funding_a,
-        'funding_b': funding_b,
+        'funding_a': funding_a_pct,
+        'funding_b': funding_b_pct,
         'funding_spread': funding_spread,
         'entry_spread': entry_spread,
         'exit_spread': exit_spread,
@@ -271,7 +273,6 @@ def fetcher_loop():
                         next_funding_time_ms = funding_times_cache[a].get(base, 0)
                         next_fund = datetime.utcfromtimestamp(next_funding_time_ms / 1000)
 
-                        # Используем Bid/Ask для расчета спреда
                         if not ask_a or not bid_b: continue
 
                         sp = pct(ask_a, bid_b)
@@ -374,7 +375,7 @@ async def telegram_webhook(request: Request):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     data = await request.json()
-    update = Update.to_json(data)
+    update = Update.de_json(data, TELE_BOT_APP.bot)
     await TELE_BOT_APP.process_update(update)
 
     return {"ok": True}
