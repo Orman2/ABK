@@ -452,7 +452,8 @@
                 if (currentSignal) {
                     await fetchAndUpdateDetailScreen(currentSignal.pair);
                 }
-            }, 100); // Обновляем каждые 0.1 секунды
+            }, 1000); // Обновляем каждые 1 секунду
+
         }
 
         function stopAutoUpdate() {
@@ -471,11 +472,27 @@
                 const updatedSignal = signals.find(s => s.pair === pair);
                 if (updatedSignal) {
                     currentSignal = updatedSignal;
-                    // Обновляем только динамические части, чтобы не перерисовывать всю страницу
                     updateDynamicContent(updatedSignal);
                 }
             } catch (err) {
                 console.error("Failed to fetch and update signal:", err);
+            }
+        }
+
+        // Вспомогательная функция для форматирования фандинга и времени
+        function formatFunding(funding) {
+            return funding !== null ? funding.toFixed(4) + '%' : 'N/A';
+        }
+
+        function formatTime(next_funding) {
+            if (!next_funding) return 'N/A';
+            const nextFundingMs = new Date(next_funding).getTime();
+            const nowMs = new Date().getTime();
+            const minutesLeft = Math.floor((nextFundingMs - nowMs) / 60000);
+            if (minutesLeft > 0) {
+                return `через ${minutesLeft} мин`;
+            } else {
+                return 'скоро';
             }
         }
 
@@ -486,39 +503,28 @@
             const bidB = document.querySelector('.right-panel .data-row:nth-child(1) .data-value');
             const askB = document.querySelector('.right-panel .data-row:nth-child(2) .data-value');
             const fundingB = document.querySelector('.right-panel .data-row:nth-child(3) .data-value');
-            const fundingTime = document.querySelector('.panel .data-row:nth-child(4) .data-value');
+            const fundingTimeA = document.querySelector('.left-panel .data-row:nth-child(4) .data-value');
+            const fundingTimeB = document.querySelector('.right-panel .data-row:nth-child(4) .data-value');
             const volA = document.querySelector('.left-panel .data-row:nth-child(5) .data-value');
             const volB = document.querySelector('.right-panel .data-row:nth-child(5) .data-value');
 
             if (bidA) bidA.textContent = (s.bid_a || 0).toFixed(8);
             if (askA) askA.textContent = (s.ask_a || 0).toFixed(8);
             if (fundingA) {
-                fundingA.textContent = (s.funding_a || 0).toFixed(4) + '%';
+                fundingA.textContent = formatFunding(s.funding_a);
                 fundingA.className = `data-value ${s.funding_a >= 0 ? 'green' : 'red'}`;
             }
-
             if (bidB) bidB.textContent = (s.bid_b || 0).toFixed(8);
             if (askB) askB.textContent = (s.ask_b || 0).toFixed(8);
             if (fundingB) {
-                fundingB.textContent = (s.funding_b || 0).toFixed(4) + '%';
+                fundingB.textContent = formatFunding(s.funding_b);
                 fundingB.className = `data-value ${s.funding_b >= 0 ? 'green' : 'red'}`;
             }
+            if (fundingTimeA) fundingTimeA.textContent = formatTime(s.next_funding);
+            if (fundingTimeB) fundingTimeB.textContent = formatTime(s.next_funding);
             if (volA) volA.textContent = ((s.vol_a || 0) / 1000000).toFixed(2) + 'M';
             if (volB) volB.textContent = ((s.vol_b || 0) / 1000000).toFixed(2) + 'M';
 
-            // Обновление времени
-            const nextFundingMs = new Date(s.next_funding).getTime();
-            const nowMs = new Date().getTime();
-            const minutesLeft = Math.floor((nextFundingMs - nowMs) / 60000);
-            if (fundingTime) {
-                if (minutesLeft > 0) {
-                    fundingTime.textContent = `через ${minutesLeft} мин`;
-                } else {
-                    fundingTime.textContent = 'скоро';
-                }
-            }
-
-            // Обновление спредов и графика
             const exitSpread = document.querySelector('.exit .value-number');
             const entrySpread = document.querySelector('.entry .value-number');
             const yourEntrySpread = document.querySelector('.your-entry .value-number');
@@ -527,7 +533,6 @@
             if (entrySpread) entrySpread.textContent = (s.entry_spread || 0).toFixed(2) + '%';
             if (yourEntrySpread) yourEntrySpread.textContent = (s.spread || 0).toFixed(3) + '%';
 
-            // Обновление графика
             if (chartInstance) {
                  chartInstance.data.datasets[0].data.shift();
                  chartInstance.data.datasets[0].data.push(s.spread);
@@ -536,7 +541,7 @@
                  chartInstance.data.datasets[3].data = Array(chartInstance.data.labels.length).fill(s.spread);
 
                  const now = new Date();
-                 const formattedTime = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
+                 const formattedTime = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
                  chartInstance.data.labels.shift();
                  chartInstance.data.labels.push(formattedTime);
 
@@ -570,10 +575,7 @@
             const signalList = document.getElementById('signal-list');
             signalList.innerHTML = '';
             signals.forEach(s => {
-                const nextFundingMs = new Date(s.next_funding).getTime();
-                const nowMs = new Date().getTime();
-                const minutesLeft = Math.floor((nextFundingMs - nowMs) / 60000);
-                let fundingTimeStr = minutesLeft > 0 ? `через ${minutesLeft} мин` : 'скоро';
+                const fundingTimeStr = formatTime(s.next_funding);
 
                 const signalItem = document.createElement('div');
                 signalItem.className = 'signal-item card';
@@ -595,7 +597,7 @@
                         <div class="summary-info" style="margin-bottom: 0;">
                             Суммарная комиссия: <span class="commission-value">${(s.total_commission || 0).toFixed(3)}%</span>
                             <div class="spread-info">
-                                <span>Спред фандинга: <span class="${(s.funding_spread || 0) >= 0 ? 'green' : 'red'}">${(s.funding_spread || 0).toFixed(4)}%</span></span>
+                                <span>Спред фандинга: <span class="${s.funding_spread !== null ? (s.funding_spread >= 0 ? 'green' : 'red') : ''}">${s.funding_spread !== null ? s.funding_spread.toFixed(4) + '%' : 'N/A'}</span></span>
                                 <span>Спред входа: <span class="${(s.entry_spread || 0) >= 0 ? 'green' : 'red'}">${(s.entry_spread || 0).toFixed(3)}%</span></span>
                                 <span>Спред выхода: <span class="${(s.exit_spread || 0) >= 0 ? 'green' : 'red'}">${(s.exit_spread || 0).toFixed(3)}%</span></span>
                             </div>
@@ -609,7 +611,7 @@
                             <div class="panel-data">
                                 <div class="data-row">Bid: <span class="data-value">${(s.bid_a || 0).toFixed(8)}</span></div>
                                 <div class="data-row">Ask: <span class="data-value">${(s.ask_a || 0).toFixed(8)}</span></div>
-                                <div class="data-row">Фандинг: <span class="data-value ${(s.funding_a || 0) >= 0 ? 'green' : 'red'}">${(s.funding_a || 0).toFixed(4)}%</span></div>
+                                <div class="data-row">Фандинг: <span class="data-value ${s.funding_a !== null ? (s.funding_a >= 0 ? 'green' : 'red') : ''}">${formatFunding(s.funding_a)}</span></div>
                                 <div class="data-row">Время: <span class="data-value">${fundingTimeStr}</span></div>
                                 <div class="data-row">Объем: <span class="data-value">${((s.vol_a || 0) / 1000000).toFixed(2)}M</span></div>
                             </div>
@@ -621,7 +623,7 @@
                             <div class="panel-data">
                                 <div class="data-row">Bid: <span class="data-value">${(s.bid_b || 0).toFixed(8)}</span></div>
                                 <div class="data-row">Ask: <span class="data-value">${(s.ask_b || 0).toFixed(8)}</span></div>
-                                <div class="data-row">Фандинг: <span class="data-value ${(s.funding_b || 0) >= 0 ? 'green' : 'red'}">${(s.funding_b || 0).toFixed(4)}%</span></div>
+                                <div class="data-row">Фандинг: <span class="data-value ${s.funding_b !== null ? (s.funding_b >= 0 ? 'green' : 'red') : ''}">${formatFunding(s.funding_b)}</span></div>
                                 <div class="data-row">Время: <span class="data-value">${fundingTimeStr}</span></div>
                                 <div class="data-row">Объем: <span class="data-value">${((s.vol_b || 0) / 1000000).toFixed(2)}M</span></div>
                             </div>
@@ -634,10 +636,7 @@
         }
 
         function generateMainScreenContent(s) {
-            const nextFundingMs = new Date(s.next_funding).getTime();
-            const nowMs = new Date().getTime();
-            const minutesLeft = Math.floor((nextFundingMs - nowMs) / 60000);
-            const fundingTimeStr = minutesLeft > 0 ? `через ${minutesLeft} мин` : 'скоро';
+            const fundingTimeStr = formatTime(s.next_funding);
 
             return `
                 <div class="pair-section">
@@ -656,7 +655,7 @@
                     <div class="summary-info">
                         Суммарная комиссия: <span class="commission-value">${(s.total_commission || 0).toFixed(3)}%</span>
                         <div class="spread-info">
-                            <span>Спред фандинга: <span class="${(s.funding_spread || 0) >= 0 ? 'green' : 'red'}">${(s.funding_spread || 0).toFixed(4)}%</span></span>
+                            <span>Спред фандинга: <span class="${s.funding_spread !== null ? (s.funding_spread >= 0 ? 'green' : 'red') : ''}">${s.funding_spread !== null ? s.funding_spread.toFixed(4) + '%' : 'N/A'}</span></span>
                             <span>Спред входа: <span class="${(s.entry_spread || 0) >= 0 ? 'green' : 'red'}">${(s.entry_spread || 0).toFixed(3)}%</span></span>
                             <span>Спред выхода: <span class="${(s.exit_spread || 0) >= 0 ? 'green' : 'red'}">${(s.exit_spread || 0).toFixed(3)}%</span></span>
                         </div>
@@ -671,7 +670,7 @@
                         <div class="panel-data">
                             <div class="data-row">Bid: <span class="data-value">${(s.bid_a || 0).toFixed(8)}</span></div>
                             <div class="data-row">Ask: <span class="data-value">${(s.ask_a || 0).toFixed(8)}</span></div>
-                            <div class="data-row">Фандинг: <span class="data-value ${(s.funding_a || 0) >= 0 ? 'green' : 'red'}">${(s.funding_a || 0).toFixed(4)}%</span></div>
+                            <div class="data-row">Фандинг: <span class="data-value ${s.funding_a !== null ? (s.funding_a >= 0 ? 'green' : 'red') : ''}">${formatFunding(s.funding_a)}</span></div>
                             <div class="data-row">Время: <span class="data-value">${fundingTimeStr}</span></div>
                             <div class="data-row">Объем: <span class="data-value">${((s.vol_a || 0) / 1000000).toFixed(2)}M</span></div>
                         </div>
@@ -683,7 +682,7 @@
                         <div class="panel-data">
                             <div class="data-row">Bid: <span class="data-value">${(s.bid_b || 0).toFixed(8)}</span></div>
                             <div class="data-row">Ask: <span class="data-value">${(s.ask_b || 0).toFixed(8)}</span></div>
-                            <div class="data-row">Фандинг: <span class="data-value ${(s.funding_b || 0) >= 0 ? 'green' : 'red'}">${(s.funding_b || 0).toFixed(4)}%</span></div>
+                            <div class="data-row">Фандинг: <span class="data-value ${s.funding_b !== null ? (s.funding_b >= 0 ? 'green' : 'red') : ''}">${formatFunding(s.funding_b)}</span></div>
                             <div class="data-row">Время: <span class="data-value">${fundingTimeStr}</span></div>
                             <div class="data-row">Объем: <span class="data-value">${((s.vol_b || 0) / 1000000).toFixed(2)}M</span></div>
                         </div>
@@ -805,7 +804,6 @@
                 }
             });
 
-            // Добавляем начальные данные в график
             updateDynamicContent(signal);
         }
 

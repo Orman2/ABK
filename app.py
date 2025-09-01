@@ -170,11 +170,15 @@ def fetch_market_data(ex, base_map, symbols):
         ask = safe_float(t.get("ask"))
         vol = safe_float(t.get("quoteVolume")) or safe_float(t.get("baseVolume")) or 0
 
-        # Получение данных о фандинге напрямую из ticker, если доступно
+        # Улучшенная логика для получения данных о фандинге и времени
         funding_rate = safe_float(t.get("fundingRate"))
         next_funding_time_ms = safe_float(t.get("info", {}).get("nextFundingTime"))
 
-        # Если время фандинга не предоставлено, используем универсальную логику
+        # Если данные о фандинге отсутствуют, возвращаем None для дальнейшей обработки
+        if funding_rate is None:
+            funding_rate = None
+
+        # Если время фандинга не предоставлено, используем нашу универсальную логику
         if next_funding_time_ms is None:
             next_funding_time_ms = next_funding_time().timestamp() * 1000
 
@@ -182,18 +186,19 @@ def fetch_market_data(ex, base_map, symbols):
         bids[base] = bid
         asks[base] = ask
         volumes[base] = vol
-        funding_rates[base] = funding_rate if funding_rate is not None else 0.0
+        funding_rates[base] = funding_rate
         funding_times[base] = next_funding_time_ms
 
     return prices, bids, asks, volumes, funding_rates, funding_times
 
 
 def calculate_spreads(signal):
-    funding_a = float(signal.get('funding_a', 0))
-    funding_b = float(signal.get('funding_b', 0))
+    funding_a = signal.get('funding_a')
+    funding_b = signal.get('funding_b')
 
-    funding_a_pct = funding_a * 100
-    funding_b_pct = funding_b * 100
+    # Обработка случая, когда фандинг отсутствует
+    funding_a_pct = funding_a * 100 if funding_a is not None else None
+    funding_b_pct = funding_b * 100 if funding_b is not None else None
 
     price_a = signal.get('ask_a', 0)
     price_b = signal.get('bid_b', 0)
@@ -203,7 +208,10 @@ def calculate_spreads(signal):
     else:
         spread = 0
 
-    funding_spread = funding_b_pct - funding_a_pct
+    funding_spread = None
+    if funding_a_pct is not None and funding_b_pct is not None:
+        funding_spread = funding_b_pct - funding_a_pct
+
     entry_spread = spread - (COMMISSION * 2 * 100)
     exit_spread = spread * 0.9 - (COMMISSION * 2 * 100)
     total_commission = COMMISSION * 2 * 100
@@ -270,12 +278,14 @@ def fetcher_loop():
                         vol_a = volumes_cache[a].get(base, 0)
                         vol_b = volumes_cache[b].get(base, 0)
 
-                        funding_a = funding_rates_cache[a].get(base, 0)
-                        funding_b = funding_rates_cache[b].get(base, 0)
+                        funding_a = funding_rates_cache[a].get(base)
+                        funding_b = funding_rates_cache[b].get(base)
 
                         next_funding_time_ms = funding_times_cache[a].get(base, 0)
-                        # Рассчитываем время фандинга в формате UTC и передаем его
-                        next_fund = datetime.utcfromtimestamp(next_funding_time_ms / 1000)
+
+                        # Рассчитываем время фандинга в формате UTC
+                        next_fund = datetime.utcfromtimestamp(
+                            next_funding_time_ms / 1000) if next_funding_time_ms else None
 
                         if not ask_a or not bid_b: continue
 
@@ -296,7 +306,7 @@ def fetcher_loop():
                             "funding_a": funding_a,
                             "funding_b": funding_b,
                             "spread": sp,
-                            "next_funding": next_fund.isoformat()
+                            "next_funding": next_fund.isoformat() if next_fund else None
                         }
 
                         full_signal = calculate_spreads(signal_data)
