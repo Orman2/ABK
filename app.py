@@ -53,7 +53,7 @@ def init_db():
         user_id INTEGER PRIMARY KEY,
         wallet REAL
     )""")
-    cur.execute(r"""
+    cur.execute("""
     CREATE TABLE IF NOT EXISTS tracking (
         user_id INTEGER,
         exchange TEXT,
