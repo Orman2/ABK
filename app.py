@@ -15,7 +15,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
-from okx.client import WSClient
+
+# Corrected OKX import
+from okx.websocket.client import WSClient
 
 # ================= CONFIG =================
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -141,7 +143,7 @@ def load_futures_markets(ex):
             symbols.append(symbol)
             if base not in base_map:
                 base_map[base] = m
-    return {"base_map": base_map, "symbols": symbols}
+    return {"base_map": base_map, "symbols": []}
 
 
 def fetch_tickers(ex, symbols):
@@ -243,6 +245,7 @@ async def binance_ws_listener():
 
 
 async def okx_ws_listener():
+    # URL для публичных данных OKX
     uri = "wss://ws.okx.com:8443/ws/v5/public"
 
     async with websockets.connect(uri) as ws:
