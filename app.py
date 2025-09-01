@@ -31,7 +31,7 @@ SPREAD_THRESHOLD_MIN = 1.0
 SPREAD_THRESHOLD_MAX = 50.0
 COMMISSION = 0.0005
 DB_FILE = "miniapp.db"
-FETCH_INTERVAL = 0.1  # Обновление каждые 0.1 секунды
+FETCH_INTERVAL = 1.0  # Обновление каждые 1 секунду
 
 SIGNALS: List[Dict[str, Any]] = []
 SIGNALS_LOCK = threading.Lock()
@@ -169,10 +169,12 @@ def fetch_market_data(ex, base_map, symbols):
         bid = safe_float(t.get("bid"))
         ask = safe_float(t.get("ask"))
         vol = safe_float(t.get("quoteVolume")) or safe_float(t.get("baseVolume")) or 0
+
+        # Получение данных о фандинге напрямую из ticker, если доступно
         funding_rate = safe_float(t.get("fundingRate"))
         next_funding_time_ms = safe_float(t.get("info", {}).get("nextFundingTime"))
 
-        # Если время фандинга не предоставлено, используем нашу универсальную логику
+        # Если время фандинга не предоставлено, используем универсальную логику
         if next_funding_time_ms is None:
             next_funding_time_ms = next_funding_time().timestamp() * 1000
 
@@ -187,11 +189,9 @@ def fetch_market_data(ex, base_map, symbols):
 
 
 def calculate_spreads(signal):
-    # Теперь funding_a и funding_b это десятичные дроби
     funding_a = float(signal.get('funding_a', 0))
     funding_b = float(signal.get('funding_b', 0))
 
-    # Расчет в процентах происходит здесь, перед отображением
     funding_a_pct = funding_a * 100
     funding_b_pct = funding_b * 100
 
@@ -293,8 +293,8 @@ def fetcher_loop():
                             "ask_b": ask_b,
                             "vol_a": vol_a,
                             "vol_b": vol_b,
-                            "funding_a": funding_a,  # Теперь десятичная дробь
-                            "funding_b": funding_b,  # Теперь десятичная дробь
+                            "funding_a": funding_a,
+                            "funding_b": funding_b,
                             "spread": sp,
                             "next_funding": next_fund.isoformat()
                         }
