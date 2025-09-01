@@ -232,17 +232,17 @@ MEXC_FUNDING = {}
 
 
 async def binance_ws_listener():
-    uri = "wss://fstream.binance.com/ws/!ticker@arr"
+    uri_ticker = "wss://fstream.binance.com/ws/!ticker@arr"
     uri_funding = "wss://fstream.binance.com/ws/!fundingRate@arr"
 
-    ticker_task = asyncio.create_task(listen_ws(uri, 'binance_ticker'))
+    ticker_task = asyncio.create_task(listen_ws(uri_ticker, 'binance_ticker'))
     funding_task = asyncio.create_task(listen_ws(uri_funding, 'binance_funding'))
 
     await asyncio.gather(ticker_task, funding_task)
 
 
 async def mexc_ws_listener():
-    # URL для публичных данных MEXC
+    # URL для публичных данных MEXC - исправлен
     uri = "wss://contract.mexc.com/ws"
 
     async for ws in websockets.connect(uri):
@@ -360,13 +360,6 @@ async def fetcher_loop_websocket():
             # Данные с Binance и MEXC получаем из кэша
             binance_data = {'prices': BINANCE_PRICES, 'funding': BINANCE_FUNDING}
             mexc_data = {'prices': MEXC_PRICES, 'funding': MEXC_FUNDING}
-
-            # Данные с других бирж получаем через CCXT
-            other_data = {}
-            for ex_id, ex in exchanges_map.items():
-                p, b, a, v, f, t = fetch_market_data(ex, markets_info[ex_id]["base_map"],
-                                                     markets_info[ex_id]["symbols"])
-                other_data[ex_id] = {'prices': p, 'bids': b, 'asks': a, 'volumes': v, 'funding': f, 'funding_times': t}
 
             # Далее вам нужно будет реализовать логику для поиска связок между всеми биржами.
             # Например, между Binance и MEXC
