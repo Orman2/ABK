@@ -7,6 +7,10 @@ from typing import Dict, Any, List
 
 import ccxt
 import requests
+import asyncio
+import websockets
+import json
+
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -31,7 +35,8 @@ SPREAD_THRESHOLD_MIN = 1.0
 SPREAD_THRESHOLD_MAX = 50.0
 COMMISSION = 0.0005
 DB_FILE = "miniapp.db"
-FETCH_INTERVAL = 1.0  # Обновление каждые 1 секунду
+# FETCH_INTERVAL больше не нужен, потому что веб-сокеты работают постоянно
+FETCH_INTERVAL = 1.0
 
 SIGNALS: List[Dict[str, Any]] = []
 SIGNALS_LOCK = threading.Lock()
@@ -174,11 +179,9 @@ def fetch_market_data(ex, base_map, symbols):
         funding_rate = safe_float(t.get("fundingRate"))
         next_funding_time_ms = safe_float(t.get("info", {}).get("nextFundingTime"))
 
-        # Если данные о фандинге отсутствуют, возвращаем None для дальнейшей обработки
         if funding_rate is None:
             funding_rate = None
 
-        # Если время фандинга не предоставлено, используем нашу универсальную логику
         if next_funding_time_ms is None:
             next_funding_time_ms = next_funding_time().timestamp() * 1000
 
@@ -196,7 +199,6 @@ def calculate_spreads(signal):
     funding_a = signal.get('funding_a')
     funding_b = signal.get('funding_b')
 
-    # Обработка случая, когда фандинг отсутствует
     funding_a_pct = funding_a * 100 if funding_a is not None else None
     funding_b_pct = funding_b * 100 if funding_b is not None else None
 
@@ -227,101 +229,147 @@ def calculate_spreads(signal):
     }
 
 
-# ================= BACKGROUND FETCHER =================
-def fetcher_loop():
-    global SIGNALS
-    print("[fetcher] starting background fetcher")
-    exchanges_map = {}
-    markets_info = {}
-    for ex_id in EX_IDS:
-        ex = init_exchange(ex_id)
-        if ex:
-            exchanges_map[ex_id] = ex
-            markets_info[ex_id] = load_futures_markets(ex)
+# ================= WEBSOCKET FETCHER =================
+async def binance_ws_listener():
+    # URL для фьючерсов Binance USDT-M
+    uri = "wss://fstream.binance.com/ws/!ticker@arr"
+
+    # URL для фандинга Binance
+    uri_funding = "wss://fstream.binance.com/ws/!fundingRate@arr"
+
+    # Создаем отдельные задачи для каждого веб-сокета
+    ticker_task = asyncio.create_task(listen_ws(uri, 'ticker'))
+    funding_task = asyncio.create_task(listen_ws(uri_funding, 'funding'))
+
+    await asyncio.gather(ticker_task, funding_task)
+
+
+async def listen_ws(uri, stream_type):
+    async for websocket in websockets.connect(uri):
+        try:
+            while True:
+                message = await websocket.recv()
+                data = json.loads(message)
+
+                # Обработка данных
+                if stream_type == 'ticker':
+                    handle_ticker_data(data)
+                elif stream_type == 'funding':
+                    handle_funding_data(data)
+
+        except websockets.ConnectionClosed:
+            print(f"Connection to {uri} closed. Reconnecting...")
+            continue
+        except Exception as e:
+            print(f"Error in {uri} listener: {e}")
+            continue
+
+
+BINANCE_PRICES = {}
+BINANCE_FUNDING = {}
+
+
+def handle_ticker_data(data):
+    # Обновляем цены (bid/ask)
+    for d in data:
+        symbol = d['s'].replace('USDT', '')
+        BINANCE_PRICES[symbol] = {
+            'bid': float(d['b']),
+            'ask': float(d['a']),
+            'volume': float(d['q'])
+        }
+
+
+def handle_funding_data(data):
+    # Обновляем фандинг и время
+    for d in data:
+        symbol = d['s'].replace('USDT', '')
+        BINANCE_FUNDING[symbol] = {
+            'rate': float(d['r']),
+            'time': float(d['T'])
+        }
+
+
+async def fetcher_loop_websocket():
+    # Запускаем слушателей веб-сокетов Binance в фоновом режиме
+    asyncio.create_task(binance_ws_listener())
+
+    exchanges_map = {ex_id: init_exchange(ex_id) for ex_id in EX_IDS if ex_id != 'binance'}
+    markets_info = {ex_id: load_futures_markets(exchanges_map[ex_id]) for ex_id in exchanges_map}
 
     while True:
         try:
             local_signals = []
-            prices_cache = {}
-            bids_cache = {}
-            asks_cache = {}
-            volumes_cache = {}
-            funding_rates_cache = {}
-            funding_times_cache = {}
+
+            # Получаем данные с Binance из кэша, который обновляется веб-сокетами
+            binance_prices = BINANCE_PRICES
+            binance_funding = BINANCE_FUNDING
+
+            # Получаем данные с других бирж, как и раньше
+            other_prices = {}
+            other_bids = {}
+            other_asks = {}
+            other_volumes = {}
+            other_funding_rates = {}
+            other_funding_times = {}
 
             for ex_id, ex in exchanges_map.items():
                 p, b, a, v, f, t = fetch_market_data(ex, markets_info[ex_id]["base_map"],
                                                      markets_info[ex_id]["symbols"])
-                prices_cache[ex_id] = p
-                bids_cache[ex_id] = b
-                asks_cache[ex_id] = a
-                volumes_cache[ex_id] = v
-                funding_rates_cache[ex_id] = f
-                funding_times_cache[ex_id] = t
+                other_prices[ex_id] = p
+                other_bids[ex_id] = b
+                other_asks[ex_id] = a
+                other_volumes[ex_id] = v
+                other_funding_rates[ex_id] = f
+                other_funding_times[ex_id] = t
 
+            # Теперь объединяем данные и находим связки
             ex_ids = list(exchanges_map.keys())
+            ex_ids.insert(0, 'binance')
+
+            # Этот цикл нужно будет изменить, чтобы он проверял каждую пару
             for i in range(len(ex_ids)):
                 for j in range(i + 1, len(ex_ids)):
                     a, b = ex_ids[i], ex_ids[j]
-                    commons = set(markets_info[a]["base_map"].keys()) & set(markets_info[b]["base_map"].keys())
-                    for base in commons:
-                        ma = markets_info[a]["base_map"].get(base)
-                        mb = markets_info[b]["base_map"].get(base)
-                        if not ma or not mb: continue
-                        if ma.get("quote") != QUOTE or mb.get("quote") != QUOTE: continue
 
-                        bid_a = bids_cache[a].get(base)
-                        ask_a = asks_cache[a].get(base)
-                        bid_b = bids_cache[b].get(base)
-                        ask_b = asks_cache[b].get(base)
+                    # Проверка связок с Binance
+                    if a == 'binance':
+                        commons = set(binance_prices.keys()) & set(markets_info.get(b, {}).get('base_map', {}).keys())
+                        for base in commons:
+                            ask_a = binance_prices[base]['ask']
+                            bid_b = other_bids[b].get(base)
 
-                        vol_a = volumes_cache[a].get(base, 0)
-                        vol_b = volumes_cache[b].get(base, 0)
+                            funding_a = binance_funding.get(base, {}).get('rate')
+                            next_funding_a = binance_funding.get(base, {}).get('time')
+                            funding_b = other_funding_rates[b].get(base)
+                            next_funding_b = other_funding_times[b].get(base)
 
-                        funding_a = funding_rates_cache[a].get(base)
-                        funding_b = funding_rates_cache[b].get(base)
+                            # ... (остальная логика расчета спреда и добавления в local_signals)
 
-                        next_funding_time_ms = funding_times_cache[a].get(base, 0)
+                    elif b == 'binance':
+                        # ... (обратная проверка)
+                        pass
 
-                        # Рассчитываем время фандинга в формате UTC
-                        next_fund = datetime.utcfromtimestamp(
-                            next_funding_time_ms / 1000) if next_funding_time_ms else None
+                    else:
+                        # ... (проверка между другими биржами, как раньше)
+                        pass
 
-                        if not ask_a or not bid_b: continue
+            # Пока что мы только выводим данные с Binance для проверки
+            print(f"Binance Tickers: {len(BINANCE_PRICES)}, Funding: {len(BINANCE_FUNDING)}")
 
-                        sp = pct(ask_a, bid_b)
-                        if sp is None: continue
-                        if sp < SPREAD_THRESHOLD_MIN or sp > SPREAD_THRESHOLD_MAX: continue
+            # Здесь пока оставим старый код, пока не реализуем полноценную логику
+            # local_signals.sort(key=lambda x: -x["spread"])
+            # with SIGNALS_LOCK:
+            #     SIGNALS = local_signals[:200]
+            # if SIGNALS:
+            #     print(f"[fetcher] {len(SIGNALS)} signals; top: {SIGNALS[0]['pair']} {SIGNALS[0]['spread']:.2f}%")
+            # else:
+            #     print("[fetcher] no signals found")
 
-                        signal_data = {
-                            "pair": f"{base}/{QUOTE}",
-                            "ex_a": a,
-                            "ex_b": b,
-                            "bid_a": bid_a,
-                            "ask_a": ask_a,
-                            "bid_b": bid_b,
-                            "ask_b": ask_b,
-                            "vol_a": vol_a,
-                            "vol_b": vol_b,
-                            "funding_a": funding_a,
-                            "funding_b": funding_b,
-                            "spread": sp,
-                            "next_funding": next_fund.isoformat() if next_fund else None
-                        }
-
-                        full_signal = calculate_spreads(signal_data)
-                        local_signals.append(full_signal)
-
-            local_signals.sort(key=lambda x: -x["spread"])
-            with SIGNALS_LOCK:
-                SIGNALS = local_signals[:200]
-            if SIGNALS:
-                print(f"[fetcher] {len(SIGNALS)} signals; top: {SIGNALS[0]['pair']} {SIGNALS[0]['spread']:.2f}%")
-            else:
-                print("[fetcher] no signals found")
+            await asyncio.sleep(1)
         except Exception as e:
             print("[fetcher] error:", e)
-        time.sleep(FETCH_INTERVAL)
+            await asyncio.sleep(5)
 
 
 # ================= TELEGRAM BOT =================
@@ -403,7 +451,8 @@ async def startup_event():
     TELE_BOT_APP.add_handler(CommandHandler("wallet", cmd_wallet))
     TELE_BOT_APP.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), wallet_text_handler))
 
-    threading.Thread(target=fetcher_loop, daemon=True).start()
+    # Запускаем новый обработчик на основе веб-сокетов
+    asyncio.create_task(fetcher_loop_websocket())
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setWebhook"
     secret_token = os.environ.get("TELEGRAM_WEBHOOK_SECRET")
@@ -422,4 +471,6 @@ async def startup_event():
 if __name__ == "__main__":
     import uvicorn
 
+    # Обратите внимание, что здесь нужно запустить uvicorn с asyncio,
+    # потому что веб-сокеты работают асинхронно
     uvicorn.run("app:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
