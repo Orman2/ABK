@@ -12,6 +12,9 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Update
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+
 # ================= CONFIG =================
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 PUBLIC_URL = os.environ.get("PUBLIC_URL", "")
