@@ -265,11 +265,14 @@ async def fetcher_loop():
                                     'exchange_a': ex_a_id,
                                     'exchange_b': ex_b_id,
                                     'ask_a': ask_a,
+                                    'bid_a': data_a.get('bids', {}).get(base),
                                     'bid_b': bid_b,
+                                    'ask_b': data_b.get('asks', {}).get(base),
                                     'spread': spread_ab,
                                     'direction': f"{ex_a_id} -> {ex_b_id}",
                                     'funding_a': data_a.get('funding_rates', {}).get(base),
                                     'funding_b': data_b.get('funding_rates', {}).get(base),
+                                    'funding_times': data_a.get('funding_times', {}).get(base),
                                 }
                                 found_signals.append(calculate_spreads(signal_ab))
 
@@ -284,11 +287,14 @@ async def fetcher_loop():
                                     'exchange_a': ex_b_id,
                                     'exchange_b': ex_a_id,
                                     'ask_a': ask_b,
+                                    'bid_a': data_b.get('bids', {}).get(base),
                                     'bid_b': bid_a,
+                                    'ask_b': data_a.get('asks', {}).get(base),
                                     'spread': spread_ba,
                                     'direction': f"{ex_b_id} -> {ex_a_id}",
                                     'funding_a': data_b.get('funding_rates', {}).get(base),
                                     'funding_b': data_a.get('funding_rates', {}).get(base),
+                                    'funding_times': data_b.get('funding_times', {}).get(base),
                                 }
                                 found_signals.append(calculate_spreads(signal_ba))
 

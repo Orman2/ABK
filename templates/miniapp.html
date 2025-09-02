@@ -15,8 +15,8 @@
             --green-color: #4CAF50;
             --red-color: #F44336;
             --purple-color: #9C27B0;
-            --entry-color: #FFC107; /* Your Entry yellow */
-            --chart-line-color: #06b6d4; /* Cyan/Turquoise */
+            --entry-color: #FFC107;
+            --chart-line-color: #06b6d4;
             --chart-grid-color: rgba(136, 136, 136, 0.2);
             --chart-label-color: #888;
         }
@@ -452,11 +452,10 @@
             stopAutoUpdate();
             updateInterval = setInterval(async () => {
                 if (currentSignal) {
-                    // Используем уникальный идентификатор для поиска сигнала, например, combination
                     const uniqueId = `${currentSignal.exchange_a}-${currentSignal.exchange_b}-${currentSignal.base}`;
                     await fetchAndUpdateDetailScreen(uniqueId);
                 }
-            }, 5000); // Обновляем каждые 5 секунд
+            }, 5000);
         }
 
         function stopAutoUpdate() {
@@ -484,7 +483,6 @@
         }
 
         function updateDynamicContent(s) {
-            // Обновление значений в панелях
             const bidA = document.querySelector('.left-panel .data-row:nth-child(1) .data-value');
             const askA = document.querySelector('.left-panel .data-row:nth-child(2) .data-value');
             const fundingA = document.querySelector('.left-panel .data-row:nth-child(3) .data-value');
@@ -506,10 +504,9 @@
                 fundingB.textContent = formatFunding(s.funding_b_pct);
                 fundingB.className = `data-value ${s.funding_b_pct >= 0 ? 'green' : 'red'}`;
             }
-            if (fundingTimeA) fundingTimeA.textContent = formatTime(s.next_funding);
-            if (fundingTimeB) fundingTimeB.textContent = formatTime(s.next_funding);
+            if (fundingTimeA) fundingTimeA.textContent = formatTime(s.funding_times);
+            if (fundingTimeB) fundingTimeB.textContent = formatTime(s.funding_times);
 
-            // Обновление значений в секции графика
             const exitSpread = document.querySelector('.exit .value-number');
             const entrySpread = document.querySelector('.entry .value-number');
             const yourEntrySpread = document.querySelector('.your-entry .value-number');
@@ -518,7 +515,6 @@
             if (entrySpread) entrySpread.textContent = (s.entry_spread || 0).toFixed(2) + '%';
             if (yourEntrySpread) yourEntrySpread.textContent = (s.spread || 0).toFixed(3) + '%';
 
-            // Обновление данных графика
             if (chartInstance) {
                 const now = new Date();
                 const formattedTime = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
@@ -531,7 +527,6 @@
                     chartInstance.data.datasets[0].data.shift();
                 }
 
-                // Обновление горизонтальных линий
                 chartInstance.data.datasets[1].data = Array(chartInstance.data.labels.length).fill(s.entry_spread);
                 chartInstance.data.datasets[2].data = Array(chartInstance.data.labels.length).fill(s.exit_spread);
                 chartInstance.data.datasets[3].data = Array(chartInstance.data.labels.length).fill(s.spread);
