@@ -233,52 +233,42 @@ EX_WS_STATUS = {ex_id: "active" for ex_id in WS_EX_IDS}
 
 
 async def listen_ws(uri, ex_id, subscription_message=None):
-    while EX_WS_STATUS[ex_id] != "disabled":
-        try:
-            async with websockets.connect(uri) as websocket:
-                print(f"[{ex_id}] Connection successful. Sending subscription message...")
-                EX_WS_STATUS[ex_id] = "active"
-                if subscription_message:
-                    await websocket.send(json.dumps(subscription_message))
+    try:
+        async with websockets.connect(uri) as websocket:
+            print(f"[{ex_id}] Connection successful. Sending subscription message...")
+            if subscription_message:
+                await websocket.send(json.dumps(subscription_message))
+            while True:
+                message = await websocket.recv()
+                data = json.loads(message)
 
-                while True:
-                    message = await websocket.recv()
-                    data = json.loads(message)
-
-                    if ex_id == 'binance':
-                        if isinstance(data, dict):
-                            if data.get('e') == '24hrTicker':
-                                handle_binance_ticker_data(data)
-                            elif data.get('e') == 'fundingRate':
-                                handle_binance_funding_data(data)
-                    elif ex_id == 'mexc':
-                        if isinstance(data, dict) and 'channel' in data:
-                            if data['channel'] == 'swap@ticker':
-                                handle_mexc_ticker_data(data['data'])
-                            elif data['channel'] == 'swap@funding_rate':
-                                handle_mexc_funding_data(data['data'])
-                    elif ex_id == 'bingx':
-                        if isinstance(data.get('data'), dict) and data.get('dataType') and data['dataType'].startswith(
-                                'ticker'):
-                            for ticker_data in data.get('data', {}).values():
-                                handle_bingx_ticker_data(ticker_data)
-                    elif ex_id == 'bybit':
-                        if isinstance(data.get('data'), list) and data.get('topic') and data['topic'].startswith(
-                                'tickers'):
-                            for ticker_data in data.get('data', []):
-                                handle_bybit_ticker_data(ticker_data)
-                    elif ex_id == 'gateio':
-                        if isinstance(data.get('result'), list) and data.get('channel') == 'futures.tickers':
-                            handle_gateio_ticker_data(data.get('result', []))
-
-        except websockets.exceptions.InvalidStatus as e:
-            print(f"[{ex_id}] Connection error: {e}. Switching to CCXT for this exchange.")
-            EX_WS_STATUS[ex_id] = "disabled"
-            break
-        except Exception as e:
-            print(f"[{ex_id}] Error in listener: {e}. Reconnecting in 5 seconds...")
-            await asyncio.sleep(5)
-            continue
+                if ex_id == 'binance':
+                    if isinstance(data, dict):
+                        if data.get('e') == '24hrTicker':
+                            handle_binance_ticker_data(data)
+                        elif data.get('e') == 'fundingRate':
+                            handle_binance_funding_data(data)
+                elif ex_id == 'mexc':
+                    if isinstance(data, dict) and 'channel' in data:
+                        if data['channel'] == 'swap@ticker':
+                            handle_mexc_ticker_data(data['data'])
+                        elif data['channel'] == 'swap@funding_rate':
+                            handle_mexc_funding_data(data['data'])
+                elif ex_id == 'bingx':
+                    if isinstance(data.get('data'), dict) and data.get('dataType') and data['dataType'].startswith(
+                            'ticker'):
+                        for ticker_data in data.get('data', {}).values():
+                            handle_bingx_ticker_data(ticker_data)
+                elif ex_id == 'bybit':
+                    if isinstance(data.get('data'), list) and data.get('topic') and data['topic'].startswith('tickers'):
+                        for ticker_data in data.get('data', []):
+                            handle_bybit_ticker_data(ticker_data)
+                elif ex_id == 'gateio':
+                    if isinstance(data.get('result'), list) and data.get('channel') == 'futures.tickers':
+                        handle_gateio_ticker_data(data.get('result', []))
+    except Exception as e:
+        print(f"[{ex_id}] Error connecting to websocket: {e}. Switching to CCXT for this exchange.")
+        EX_WS_STATUS[ex_id] = "disabled"
 
 
 def handle_binance_ticker_data(data):
@@ -339,24 +329,34 @@ async def fetcher_loop():
     markets_info = {ex_id: load_futures_markets(exchanges_map[ex_id]) for ex_id in exchanges_map}
 
     # Запускаем слушателей веб-сокетов
-    asyncio.create_task(listen_ws("wss://fstream.binance.com/ws/!ticker@arr", "binance"))
-    asyncio.create_task(listen_ws("wss://fstream.binance.com/ws/!fundingRate@arr", "binance"))
-    asyncio.create_task(listen_ws("wss://contract.mexc.com/ws", "mexc",
-                                  {"method": "subscription", "params": ["swap@ticker@all", "swap@funding_rate@all"]}))
-    asyncio.create_task(listen_ws("wss://fstream-ws.bingx.com/ws/V1_ticker", "bingx",
-                                  {"id": "test", "reqType": "sub", "dataType": "ticker.all"}))
+    ws_tasks = []
 
+    # Binance
+    ws_tasks.append(asyncio.create_task(listen_ws("wss://fstream.binance.com/ws/!ticker@arr", "binance")))
+    ws_tasks.append(asyncio.create_task(listen_ws("wss://fstream.binance.com/ws/!fundingRate@arr", "binance")))
+
+    # MEXC
+    ws_tasks.append(asyncio.create_task(listen_ws("wss://contract.mexc.com/ws", "mexc", {"method": "subscription",
+                                                                                         "params": ["swap@ticker@all",
+                                                                                                    "swap@funding_rate@all"]})))
+
+    # BingX
+    ws_tasks.append(asyncio.create_task(listen_ws("wss://fstream-ws.bingx.com/ws/V1_ticker", "bingx",
+                                                  {"id": "test", "reqType": "sub", "dataType": "ticker.all"})))
+
+    # Bybit
     bybit_symbols = [s.replace('USDT', '') for s in markets_info['bybit']['symbols']]
     bybit_topics = [f"tickers.{s}USDT" for s in bybit_symbols]
     bybit_ws_uri = "wss://stream.bybit.com/v5/public/linear"
     bybit_subscription = {"op": "subscribe", "args": bybit_topics}
-    asyncio.create_task(listen_ws(bybit_ws_uri, "bybit", bybit_subscription))
+    ws_tasks.append(asyncio.create_task(listen_ws(bybit_ws_uri, "bybit", bybit_subscription)))
 
+    # Gate.io
     gateio_symbols = [s.replace('_USDT', '') for s in markets_info['gateio']['symbols']]
     gateio_ws_uri = "wss://api.gateio.ws/ws/v4/"
     gateio_subscription = {"time": int(time.time()), "channel": "futures.tickers", "event": "subscribe",
                            "payload": [f"USDT_{s}" for s in gateio_symbols]}
-    asyncio.create_task(listen_ws(gateio_ws_uri, "gateio", gateio_subscription))
+    ws_tasks.append(asyncio.create_task(listen_ws(gateio_ws_uri, "gateio", gateio_subscription)))
 
     while True:
         try:
