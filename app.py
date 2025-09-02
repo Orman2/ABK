@@ -154,6 +154,7 @@ def fetch_market_data(ex, base_map, symbols):
     asks = {}
     funding_rates = {}
     funding_times = {}
+    volumes = {}
 
     tickers = fetch_tickers(ex, symbols)
 
@@ -167,6 +168,7 @@ def fetch_market_data(ex, base_map, symbols):
         ask = safe_float(t.get("ask"))
         funding_rate = safe_float(t.get("fundingRate"))
         next_funding_time_ms = safe_float(t.get("info", {}).get("nextFundingTime"))
+        volume_24h = safe_float(t.get("quoteVolume"))
 
         if funding_rate is None:
             funding_rate = None
@@ -178,8 +180,9 @@ def fetch_market_data(ex, base_map, symbols):
         asks[base] = ask
         funding_rates[base] = funding_rate
         funding_times[base] = next_funding_time_ms
+        volumes[base] = volume_24h
 
-    return bids, asks, funding_rates, funding_times
+    return bids, asks, funding_rates, funding_times, volumes
 
 
 def calculate_spreads(signal):
@@ -228,17 +231,20 @@ async def fetcher_loop():
                 ex = exchanges_map.get(ex_id)
                 info = markets_info.get(ex_id)
                 if ex and info:
-                    bids, asks, funding_rates, funding_times = fetch_market_data(ex, info["base_map"], info["symbols"])
+                    bids, asks, funding_rates, funding_times, volumes = fetch_market_data(ex, info["base_map"],
+                                                                                          info["symbols"])
                     all_ex_data[ex_id] = {
                         'bids': bids,
                         'asks': asks,
                         'funding_rates': funding_rates,
-                        'funding_times': funding_times
+                        'funding_times': funding_times,
+                        'volumes': volumes
                     }
                     print(f"[{ex_id}] Fetched {len(bids)} pairs via CCXT.")
 
             # Логика для поиска арбитражных связок
             found_signals = []
+            unique_signals = set()  # Используем set для отслеживания уникальных связок
             exchanges_list = list(all_ex_data.keys())
 
             for i in range(len(exchanges_list)):
@@ -254,49 +260,41 @@ async def fetcher_loop():
                     common_bases = set(data_a.get('bids', {}).keys()) & set(data_b.get('bids', {}).keys())
 
                     for base in common_bases:
-                        ask_a = data_a.get('asks', {}).get(base)
-                        bid_b = data_b.get('bids', {}).get(base)
+                        # Проверяем связку в обе стороны
+                        pairs_to_check = [
+                            (ex_a_id, ex_b_id, data_a, data_b),
+                            (ex_b_id, ex_a_id, data_b, data_a)
+                        ]
 
-                        if ask_a and bid_b:
-                            spread_ab = pct(ask_a, bid_b)
-                            if spread_ab and SPREAD_THRESHOLD_MIN <= spread_ab <= SPREAD_THRESHOLD_MAX:
-                                signal_ab = {
-                                    'base': base,
-                                    'exchange_a': ex_a_id,
-                                    'exchange_b': ex_b_id,
-                                    'ask_a': ask_a,
-                                    'bid_a': data_a.get('bids', {}).get(base),
-                                    'bid_b': bid_b,
-                                    'ask_b': data_b.get('asks', {}).get(base),
-                                    'spread': spread_ab,
-                                    'direction': f"{ex_a_id} -> {ex_b_id}",
-                                    'funding_a': data_a.get('funding_rates', {}).get(base),
-                                    'funding_b': data_b.get('funding_rates', {}).get(base),
-                                    'funding_times': data_a.get('funding_times', {}).get(base),
-                                }
-                                found_signals.append(calculate_spreads(signal_ab))
+                        for ex_id1, ex_id2, data1, data2 in pairs_to_check:
+                            key = tuple(sorted((ex_id1, ex_id2))) + (base,)
+                            if key in unique_signals:
+                                continue
 
-                        ask_b = data_b.get('asks', {}).get(base)
-                        bid_a = data_a.get('bids', {}).get(base)
+                            ask1 = data1.get('asks', {}).get(base)
+                            bid2 = data2.get('bids', {}).get(base)
 
-                        if ask_b and bid_a:
-                            spread_ba = pct(ask_b, bid_a)
-                            if spread_ba and SPREAD_THRESHOLD_MIN <= spread_ba <= SPREAD_THRESHOLD_MAX:
-                                signal_ba = {
-                                    'base': base,
-                                    'exchange_a': ex_b_id,
-                                    'exchange_b': ex_a_id,
-                                    'ask_a': ask_b,
-                                    'bid_a': data_b.get('bids', {}).get(base),
-                                    'bid_b': bid_a,
-                                    'ask_b': data_a.get('asks', {}).get(base),
-                                    'spread': spread_ba,
-                                    'direction': f"{ex_b_id} -> {ex_a_id}",
-                                    'funding_a': data_b.get('funding_rates', {}).get(base),
-                                    'funding_b': data_a.get('funding_rates', {}).get(base),
-                                    'funding_times': data_b.get('funding_times', {}).get(base),
-                                }
-                                found_signals.append(calculate_spreads(signal_ba))
+                            if ask1 and bid2:
+                                spread = pct(ask1, bid2)
+                                if spread and SPREAD_THRESHOLD_MIN <= spread <= SPREAD_THRESHOLD_MAX:
+                                    signal = {
+                                        'base': base,
+                                        'exchange_a': ex_id1,
+                                        'exchange_b': ex_id2,
+                                        'ask_a': ask1,
+                                        'bid_a': data1.get('bids', {}).get(base),
+                                        'bid_b': bid2,
+                                        'ask_b': data2.get('asks', {}).get(base),
+                                        'spread': spread,
+                                        'direction': f"{ex_id1} -> {ex_id2}",
+                                        'funding_a': data1.get('funding_rates', {}).get(base),
+                                        'funding_b': data2.get('funding_rates', {}).get(base),
+                                        'funding_times': data1.get('funding_times', {}).get(base),
+                                        'volume_a': data1.get('volumes', {}).get(base),
+                                        'volume_b': data2.get('volumes', {}).get(base),
+                                    }
+                                    found_signals.append(calculate_spreads(signal))
+                                    unique_signals.add(key)
 
             with SIGNALS_LOCK:
                 SIGNALS.clear()

@@ -455,7 +455,7 @@
                     const uniqueId = `${currentSignal.exchange_a}-${currentSignal.exchange_b}-${currentSignal.base}`;
                     await fetchAndUpdateDetailScreen(uniqueId);
                 }
-            }, 5000);
+            }, 2000); // Обновляем каждые 2 секунды
         }
 
         function stopAutoUpdate() {
@@ -486,34 +486,45 @@
             const bidA = document.querySelector('.left-panel .data-row:nth-child(1) .data-value');
             const askA = document.querySelector('.left-panel .data-row:nth-child(2) .data-value');
             const fundingA = document.querySelector('.left-panel .data-row:nth-child(3) .data-value');
+            const fundingPercentA = document.querySelector('.left-panel .data-row:nth-child(4) .data-value');
+            const volumeA = document.querySelector('.left-panel .data-row:nth-child(5) .data-value');
+
             const bidB = document.querySelector('.right-panel .data-row:nth-child(1) .data-value');
             const askB = document.querySelector('.right-panel .data-row:nth-child(2) .data-value');
             const fundingB = document.querySelector('.right-panel .data-row:nth-child(3) .data-value');
-            const fundingTimeA = document.querySelector('.left-panel .data-row:nth-child(4) .data-value');
-            const fundingTimeB = document.querySelector('.right-panel .data-row:nth-child(4) .data-value');
-
-            if (bidA) bidA.textContent = (s.bid_a || 0).toFixed(8);
-            if (askA) askA.textContent = (s.ask_a || 0).toFixed(8);
-            if (fundingA) {
-                fundingA.textContent = formatFunding(s.funding_a_pct);
-                fundingA.className = `data-value ${s.funding_a_pct >= 0 ? 'green' : 'red'}`;
-            }
-            if (bidB) bidB.textContent = (s.bid_b || 0).toFixed(8);
-            if (askB) askB.textContent = (s.ask_b || 0).toFixed(8);
-            if (fundingB) {
-                fundingB.textContent = formatFunding(s.funding_b_pct);
-                fundingB.className = `data-value ${s.funding_b_pct >= 0 ? 'green' : 'red'}`;
-            }
-            if (fundingTimeA) fundingTimeA.textContent = formatTime(s.funding_times);
-            if (fundingTimeB) fundingTimeB.textContent = formatTime(s.funding_times);
+            const fundingPercentB = document.querySelector('.right-panel .data-row:nth-child(4) .data-value');
+            const volumeB = document.querySelector('.right-panel .data-row:nth-child(5) .data-value');
 
             const exitSpread = document.querySelector('.exit .value-number');
             const entrySpread = document.querySelector('.entry .value-number');
             const yourEntrySpread = document.querySelector('.your-entry .value-number');
+            const fundingSpread = document.querySelector('#funding-spread-value');
+
+            if (bidA) bidA.textContent = (s.bid_a || 0).toFixed(8);
+            if (askA) askA.textContent = (s.ask_a || 0).toFixed(8);
+            if (fundingA) fundingA.textContent = formatTime(s.funding_times);
+            if (fundingPercentA) {
+                fundingPercentA.textContent = formatFunding(s.funding_a_pct);
+                fundingPercentA.className = `data-value ${s.funding_a_pct >= 0 ? 'green' : 'red'}`;
+            }
+            if (volumeA) volumeA.textContent = formatVolume(s.volume_a);
+
+            if (bidB) bidB.textContent = (s.bid_b || 0).toFixed(8);
+            if (askB) askB.textContent = (s.ask_b || 0).toFixed(8);
+            if (fundingB) fundingB.textContent = formatTime(s.funding_times);
+            if (fundingPercentB) {
+                fundingPercentB.textContent = formatFunding(s.funding_b_pct);
+                fundingPercentB.className = `data-value ${s.funding_b_pct >= 0 ? 'green' : 'red'}`;
+            }
+            if (volumeB) volumeB.textContent = formatVolume(s.volume_b);
 
             if (exitSpread) exitSpread.textContent = (s.exit_spread || 0).toFixed(2) + '%';
             if (entrySpread) entrySpread.textContent = (s.entry_spread || 0).toFixed(2) + '%';
             if (yourEntrySpread) yourEntrySpread.textContent = (s.spread || 0).toFixed(3) + '%';
+            if (fundingSpread) {
+                fundingSpread.textContent = s.funding_spread !== null ? s.funding_spread.toFixed(4) + '%' : 'N/A';
+                fundingSpread.className = s.funding_spread !== null ? (s.funding_spread >= 0 ? 'green' : 'red') : '';
+            }
 
             if (chartInstance) {
                 const now = new Date();
@@ -644,6 +655,22 @@
             }
         }
 
+        function formatVolume(volume) {
+            if (volume === null || volume === undefined) return 'N/A';
+            const billion = 1000000000;
+            const million = 1000000;
+            const thousand = 1000;
+
+            if (volume >= billion) {
+                return (volume / billion).toFixed(2) + 'B';
+            } else if (volume >= million) {
+                return (volume / million).toFixed(2) + 'M';
+            } else if (volume >= thousand) {
+                return (volume / thousand).toFixed(2) + 'K';
+            }
+            return volume.toFixed(2);
+        }
+
         function generateMainScreenContent(s) {
             const fundingTimeStr = formatTime(s.funding_times);
             return `
@@ -663,7 +690,7 @@
                     <div class="summary-info">
                         Суммарная комиссия: <span class="commission-value">${(s.total_commission || 0).toFixed(3)}%</span>
                         <div class="spread-info">
-                            <span>Спред фандинга: <span class="${s.funding_spread !== null ? (s.funding_spread >= 0 ? 'green' : 'red') : ''}">${s.funding_spread !== null ? s.funding_spread.toFixed(4) + '%' : 'N/A'}</span></span>
+                            <span>Спред фандинга: <span id="funding-spread-value" class="${s.funding_spread !== null ? (s.funding_spread >= 0 ? 'green' : 'red') : ''}">${s.funding_spread !== null ? s.funding_spread.toFixed(4) + '%' : 'N/A'}</span></span>
                             <span>Спред входа: <span class="${(s.entry_spread || 0) >= 0 ? 'green' : 'red'}">${(s.entry_spread || 0).toFixed(3)}%</span></span>
                             <span>Спред выхода: <span class="${(s.exit_spread || 0) >= 0 ? 'green' : 'red'}">${(s.exit_spread || 0).toFixed(3)}%</span></span>
                         </div>
@@ -678,8 +705,9 @@
                         <div class="panel-data">
                             <div class="data-row">Bid: <span class="data-value">${(s.bid_a || 0).toFixed(8)}</span></div>
                             <div class="data-row">Ask: <span class="data-value">${(s.ask_a || 0).toFixed(8)}</span></div>
-                            <div class="data-row">Фандинг: <span class="data-value ${s.funding_a_pct !== null ? (s.funding_a_pct >= 0 ? 'green' : 'red') : ''}">${formatFunding(s.funding_a_pct)}</span></div>
-                            <div class="data-row">Время: <span class="data-value">${fundingTimeStr}</span></div>
+                            <div class="data-row">Время фанд.: <span class="data-value">${fundingTimeStr}</span></div>
+                            <div class="data-row">Процент фандинга: <span class="data-value ${s.funding_a_pct !== null ? (s.funding_a_pct >= 0 ? 'green' : 'red') : ''}">${formatFunding(s.funding_a_pct)}</span></div>
+                            <div class="data-row">Объем USDT 24Ч: <span class="data-value">${formatVolume(s.volume_a)}</span></div>
                         </div>
                     </div>
                     <div class="panel right-panel">
@@ -689,8 +717,9 @@
                         <div class="panel-data">
                             <div class="data-row">Bid: <span class="data-value">${(s.bid_b || 0).toFixed(8)}</span></div>
                             <div class="data-row">Ask: <span class="data-value">${(s.ask_b || 0).toFixed(8)}</span></div>
-                            <div class="data-row">Фандинг: <span class="data-value ${s.funding_b_pct !== null ? (s.funding_b_pct >= 0 ? 'green' : 'red') : ''}">${formatFunding(s.funding_b_pct)}</span></div>
-                            <div class="data-row">Время: <span class="data-value">${fundingTimeStr}</span></div>
+                            <div class="data-row">Время фанд.: <span class="data-value">${fundingTimeStr}</span></div>
+                            <div class="data-row">Процент фандинга: <span class="data-value ${s.funding_b_pct !== null ? (s.funding_b_pct >= 0 ? 'green' : 'red') : ''}">${formatFunding(s.funding_b_pct)}</span></div>
+                            <div class="data-row">Объем USDT 24Ч: <span class="data-value">${formatVolume(s.volume_b)}</span></div>
                         </div>
                     </div>
                 </div>
@@ -706,14 +735,6 @@
                         <div class="value-item your-entry">Ваш. вх. <span class="value-number">${(s.spread || 0).toFixed(3)}%</span></div>
                     </div>
                 </div>
-
-                <footer class="main-footer">
-                    <div class="spread-history-title">${s.base} - История спредов</div>
-                    <div class="spread-history-subtitle">Биржи: ${s.exchange_a.toUpperCase()} и ${s.exchange_b.toUpperCase()}</div>
-                    <div class="period-selector">
-                        Период: <span>3 дня</span> <span class="nav-icon">⬇️</span>
-                    </div>
-                </footer>
             `;
         }
 
@@ -757,8 +778,9 @@
                             <div class="panel-data">
                                 <div class="data-row">Bid: <span class="data-value">${(s.bid_a || 0).toFixed(8)}</span></div>
                                 <div class="data-row">Ask: <span class="data-value">${(s.ask_a || 0).toFixed(8)}</span></div>
-                                <div class="data-row">Фандинг: <span class="data-value ${s.funding_a_pct !== null ? (s.funding_a_pct >= 0 ? 'green' : 'red') : ''}">${formatFunding(s.funding_a_pct)}</span></div>
-                                <div class="data-row">Время: <span class="data-value">${fundingTimeStr}</span></div>
+                                <div class="data-row">Время фанд.: <span class="data-value">${fundingTimeStr}</span></div>
+                                <div class="data-row">Процент фандинга: <span class="data-value ${s.funding_a_pct !== null ? (s.funding_a_pct >= 0 ? 'green' : 'red') : ''}">${formatFunding(s.funding_a_pct)}</span></div>
+                                <div class="data-row">Объем USDT 24Ч: <span class="data-value">${formatVolume(s.volume_a)}</span></div>
                             </div>
                         </div>
                         <div class="panel right-panel">
@@ -768,8 +790,9 @@
                             <div class="panel-data">
                                 <div class="data-row">Bid: <span class="data-value">${(s.bid_b || 0).toFixed(8)}</span></div>
                                 <div class="data-row">Ask: <span class="data-value">${(s.ask_b || 0).toFixed(8)}</span></div>
-                                <div class="data-row">Фандинг: <span class="data-value ${s.funding_b_pct !== null ? (s.funding_b_pct >= 0 ? 'green' : 'red') : ''}">${formatFunding(s.funding_b_pct)}</span></div>
-                                <div class="data-row">Время: <span class="data-value">${fundingTimeStr}</span></div>
+                                <div class="data-row">Время фанд.: <span class="data-value">${fundingTimeStr}</span></div>
+                                <div class="data-row">Процент фандинга: <span class="data-value ${s.funding_b_pct !== null ? (s.funding_b_pct >= 0 ? 'green' : 'red') : ''}">${formatFunding(s.funding_b_pct)}</span></div>
+                                <div class="data-row">Объем USDT 24Ч: <span class="data-value">${formatVolume(s.volume_b)}</span></div>
                             </div>
                         </div>
                     </div>
