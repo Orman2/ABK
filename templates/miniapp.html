@@ -15,8 +15,8 @@
             --green-color: #4CAF50;
             --red-color: #F44336;
             --purple-color: #9C27B0;
-            --entry-color: #FFC107;
-            --chart-line-color: #06b6d4;
+            --entry-color: #FFC107; /* Your Entry yellow */
+            --chart-line-color: #06b6d4; /* Cyan/Turquoise */
             --chart-grid-color: rgba(136, 136, 136, 0.2);
             --chart-label-color: #888;
         }
@@ -421,8 +421,6 @@
         let updateInterval = null;
         let currentSignal = null;
 
-        const getCssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-
         function showScreen(screenId, signalData = null) {
             const mainScreen = document.getElementById('main-screen');
             const listScreen = document.getElementById('list-screen');
@@ -452,10 +450,10 @@
             stopAutoUpdate();
             updateInterval = setInterval(async () => {
                 if (currentSignal) {
-                    const uniqueId = `${currentSignal.exchange_a}-${currentSignal.exchange_b}-${currentSignal.base}`;
-                    await fetchAndUpdateDetailScreen(uniqueId);
+                    await fetchAndUpdateDetailScreen(currentSignal.pair);
                 }
-            }, 2000); // Обновляем каждые 2 секунды
+            }, 1000); // Обновляем каждые 1 секунду
+
         }
 
         function stopAutoUpdate() {
@@ -465,14 +463,13 @@
             }
         }
 
-        async function fetchAndUpdateDetailScreen(uniqueId) {
+        async function fetchAndUpdateDetailScreen(pair) {
             try {
                 const userId = tg.initDataUnsafe.user.id;
                 const res = await fetch(`/api/signals?user_id=${userId}`);
                 const signals = await res.json();
 
-                const updatedSignal = signals.find(s => `${s.exchange_a}-${s.exchange_b}-${s.base}` === uniqueId);
-
+                const updatedSignal = signals.find(s => s.pair === pair);
                 if (updatedSignal) {
                     currentSignal = updatedSignal;
                     updateDynamicContent(updatedSignal);
@@ -482,73 +479,243 @@
             }
         }
 
+        // Вспомогательная функция для форматирования фандинга и времени
+        function formatFunding(funding) {
+            return funding !== null ? funding.toFixed(4) + '%' : 'N/A';
+        }
+
+        function formatTime(next_funding) {
+            if (!next_funding) return 'N/A';
+            const nextFundingMs = new Date(next_funding).getTime();
+            const nowMs = new Date().getTime();
+            const minutesLeft = Math.floor((nextFundingMs - nowMs) / 60000);
+            if (minutesLeft > 0) {
+                return `через ${minutesLeft} мин`;
+            } else {
+                return 'скоро';
+            }
+        }
+
         function updateDynamicContent(s) {
             const bidA = document.querySelector('.left-panel .data-row:nth-child(1) .data-value');
             const askA = document.querySelector('.left-panel .data-row:nth-child(2) .data-value');
             const fundingA = document.querySelector('.left-panel .data-row:nth-child(3) .data-value');
-            const fundingPercentA = document.querySelector('.left-panel .data-row:nth-child(4) .data-value');
-            const volumeA = document.querySelector('.left-panel .data-row:nth-child(5) .data-value');
-
             const bidB = document.querySelector('.right-panel .data-row:nth-child(1) .data-value');
             const askB = document.querySelector('.right-panel .data-row:nth-child(2) .data-value');
             const fundingB = document.querySelector('.right-panel .data-row:nth-child(3) .data-value');
-            const fundingPercentB = document.querySelector('.right-panel .data-row:nth-child(4) .data-value');
-            const volumeB = document.querySelector('.right-panel .data-row:nth-child(5) .data-value');
+            const fundingTimeA = document.querySelector('.left-panel .data-row:nth-child(4) .data-value');
+            const fundingTimeB = document.querySelector('.right-panel .data-row:nth-child(4) .data-value');
+            const volA = document.querySelector('.left-panel .data-row:nth-child(5) .data-value');
+            const volB = document.querySelector('.right-panel .data-row:nth-child(5) .data-value');
+
+            if (bidA) bidA.textContent = (s.bid_a || 0).toFixed(8);
+            if (askA) askA.textContent = (s.ask_a || 0).toFixed(8);
+            if (fundingA) {
+                fundingA.textContent = formatFunding(s.funding_a);
+                fundingA.className = `data-value ${s.funding_a >= 0 ? 'green' : 'red'}`;
+            }
+            if (bidB) bidB.textContent = (s.bid_b || 0).toFixed(8);
+            if (askB) askB.textContent = (s.ask_b || 0).toFixed(8);
+            if (fundingB) {
+                fundingB.textContent = formatFunding(s.funding_b);
+                fundingB.className = `data-value ${s.funding_b >= 0 ? 'green' : 'red'}`;
+            }
+            if (fundingTimeA) fundingTimeA.textContent = formatTime(s.next_funding);
+            if (fundingTimeB) fundingTimeB.textContent = formatTime(s.next_funding);
+            if (volA) volA.textContent = ((s.vol_a || 0) / 1000000).toFixed(2) + 'M';
+            if (volB) volB.textContent = ((s.vol_b || 0) / 1000000).toFixed(2) + 'M';
 
             const exitSpread = document.querySelector('.exit .value-number');
             const entrySpread = document.querySelector('.entry .value-number');
             const yourEntrySpread = document.querySelector('.your-entry .value-number');
-            const fundingSpread = document.querySelector('#funding-spread-value');
-
-            if (bidA) bidA.textContent = (s.bid_a || 0).toFixed(8);
-            if (askA) askA.textContent = (s.ask_a || 0).toFixed(8);
-            if (fundingA) fundingA.textContent = formatTime(s.funding_times);
-            if (fundingPercentA) {
-                fundingPercentA.textContent = formatFunding(s.funding_a_pct);
-                fundingPercentA.className = `data-value ${s.funding_a_pct >= 0 ? 'green' : 'red'}`;
-            }
-            if (volumeA) volumeA.textContent = formatVolume(s.volume_a);
-
-            if (bidB) bidB.textContent = (s.bid_b || 0).toFixed(8);
-            if (askB) askB.textContent = (s.ask_b || 0).toFixed(8);
-            if (fundingB) fundingB.textContent = formatTime(s.funding_times);
-            if (fundingPercentB) {
-                fundingPercentB.textContent = formatFunding(s.funding_b_pct);
-                fundingPercentB.className = `data-value ${s.funding_b_pct >= 0 ? 'green' : 'red'}`;
-            }
-            if (volumeB) volumeB.textContent = formatVolume(s.volume_b);
 
             if (exitSpread) exitSpread.textContent = (s.exit_spread || 0).toFixed(2) + '%';
             if (entrySpread) entrySpread.textContent = (s.entry_spread || 0).toFixed(2) + '%';
             if (yourEntrySpread) yourEntrySpread.textContent = (s.spread || 0).toFixed(3) + '%';
-            if (fundingSpread) {
-                fundingSpread.textContent = s.funding_spread !== null ? s.funding_spread.toFixed(4) + '%' : 'N/A';
-                fundingSpread.className = s.funding_spread !== null ? (s.funding_spread >= 0 ? 'green' : 'red') : '';
-            }
 
             if (chartInstance) {
-                const now = new Date();
-                const formattedTime = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+                 chartInstance.data.datasets[0].data.shift();
+                 chartInstance.data.datasets[0].data.push(s.spread);
+                 chartInstance.data.datasets[1].data = Array(chartInstance.data.labels.length).fill(s.entry_spread);
+                 chartInstance.data.datasets[2].data = Array(chartInstance.data.labels.length).fill(s.exit_spread);
+                 chartInstance.data.datasets[3].data = Array(chartInstance.data.labels.length).fill(s.spread);
 
-                chartInstance.data.labels.push(formattedTime);
-                chartInstance.data.datasets[0].data.push(s.spread);
+                 const now = new Date();
+                 const formattedTime = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+                 chartInstance.data.labels.shift();
+                 chartInstance.data.labels.push(formattedTime);
 
-                if (chartInstance.data.labels.length > 20) {
-                    chartInstance.data.labels.shift();
-                    chartInstance.data.datasets[0].data.shift();
-                }
-
-                chartInstance.data.datasets[1].data = Array(chartInstance.data.labels.length).fill(s.entry_spread);
-                chartInstance.data.datasets[2].data = Array(chartInstance.data.labels.length).fill(s.exit_spread);
-                chartInstance.data.datasets[3].data = Array(chartInstance.data.labels.length).fill(s.spread);
-
-                chartInstance.update();
+                 chartInstance.update();
             }
+        }
+
+
+        async function loadSignals() {
+            const signalList = document.getElementById('signal-list');
+            signalList.innerHTML = '<div id="loading-state">Загрузка сигналов...</div>';
+
+            try {
+                const userId = tg.initDataUnsafe.user.id;
+                const res = await fetch(`/api/signals?user_id=${userId}`);
+                const signals = await res.json();
+
+                allSignals = signals;
+                if (!signals || signals.length === 0) {
+                    signalList.innerHTML = '<div id="loading-state">Сигналов пока нет.</div>';
+                    return;
+                }
+                renderSignalList(signals);
+            } catch(err) {
+                console.error("Ошибка загрузки сигналов:", err);
+                signalList.innerHTML = '<div id="loading-state">Ошибка загрузки сигналов.</div>';
+            }
+        }
+
+        function renderSignalList(signals) {
+            const signalList = document.getElementById('signal-list');
+            signalList.innerHTML = '';
+            signals.forEach(s => {
+                const fundingTimeStr = formatTime(s.next_funding);
+
+                const signalItem = document.createElement('div');
+                signalItem.className = 'signal-item card';
+                signalItem.dataset.pair = s.pair;
+                signalItem.innerHTML = `
+                    <div class="pair-section" style="padding: 0; margin-bottom: 0; background: none;">
+                        <div class="pair-header" style="margin-bottom: 5px;">
+                            <span class="pair-icon">
+                                <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+                                    <path fill-rule="evenodd" d="M2 12a10 10 0 1 1 20 0 10 10 0 0 1-20 0Zm9.406-5.5a1 1 0 1 0 0 2h.124a2.51 2.51 0 0 1 2.378 1.488 2.5 2.5 0 1 1 2.766 4.673A2.5 2.5 0 0 1 15 17.5a2.5 2.5 0 0 1-4.99-.21l-.01.21a2.5 2.5 0 0 1-4.707-.417 1 1 0 0 0-1.85.834A4.5 4.5 0 0 0 8 17.5a4.5 4.5 0 0 0 4.29-3.417 4.51 4.51 0 0 0-3.384-5.385 1 1 0 0 0 1.5-1.698Z" clip-rule="evenodd"/>
+                                </svg>
+                            </span>
+                            <span class="pair-name">${s.pair}</span>
+                            <span class="icon-wrap">
+                                <span class="icon-label">${s.signals_count}</span>
+                                <span class="icon">⚙️</span>
+                            </span>
+                        </div>
+                        <div class="summary-info" style="margin-bottom: 0;">
+                            Суммарная комиссия: <span class="commission-value">${(s.total_commission || 0).toFixed(3)}%</span>
+                            <div class="spread-info">
+                                <span>Спред фандинга: <span class="${s.funding_spread !== null ? (s.funding_spread >= 0 ? 'green' : 'red') : ''}">${s.funding_spread !== null ? s.funding_spread.toFixed(4) + '%' : 'N/A'}</span></span>
+                                <span>Спред входа: <span class="${(s.entry_spread || 0) >= 0 ? 'green' : 'red'}">${(s.entry_spread || 0).toFixed(3)}%</span></span>
+                                <span>Спред выхода: <span class="${(s.exit_spread || 0) >= 0 ? 'green' : 'red'}">${(s.exit_spread || 0).toFixed(3)}%</span></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="panel-container" style="margin-top: 10px;">
+                        <div class="panel left-panel">
+                            <div class="panel-header">
+                                <span class="panel-icon-text">↓ S</span> ${s.ex_a.toUpperCase()} фьюч. <span class="panel-icon">🗗</span>
+                            </div>
+                            <div class="panel-data">
+                                <div class="data-row">Bid: <span class="data-value">${(s.bid_a || 0).toFixed(8)}</span></div>
+                                <div class="data-row">Ask: <span class="data-value">${(s.ask_a || 0).toFixed(8)}</span></div>
+                                <div class="data-row">Фандинг: <span class="data-value ${s.funding_a !== null ? (s.funding_a >= 0 ? 'green' : 'red') : ''}">${formatFunding(s.funding_a)}</span></div>
+                                <div class="data-row">Время: <span class="data-value">${fundingTimeStr}</span></div>
+                                <div class="data-row">Объем: <span class="data-value">${((s.vol_a || 0) / 1000000).toFixed(2)}M</span></div>
+                            </div>
+                        </div>
+                        <div class="panel right-panel">
+                            <div class="panel-header">
+                                <span class="panel-icon-text">↑ L</span> ${s.ex_b.toUpperCase()} фьюч. <span class="panel-icon">🗗</span>
+                            </div>
+                            <div class="panel-data">
+                                <div class="data-row">Bid: <span class="data-value">${(s.bid_b || 0).toFixed(8)}</span></div>
+                                <div class="data-row">Ask: <span class="data-value">${(s.ask_b || 0).toFixed(8)}</span></div>
+                                <div class="data-row">Фандинг: <span class="data-value ${s.funding_b !== null ? (s.funding_b >= 0 ? 'green' : 'red') : ''}">${formatFunding(s.funding_b)}</span></div>
+                                <div class="data-row">Время: <span class="data-value">${fundingTimeStr}</span></div>
+                                <div class="data-row">Объем: <span class="data-value">${((s.vol_b || 0) / 1000000).toFixed(2)}M</span></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                signalList.appendChild(signalItem);
+                signalItem.addEventListener('click', () => showScreen('main', s));
+            });
+        }
+
+        function generateMainScreenContent(s) {
+            const fundingTimeStr = formatTime(s.next_funding);
+
+            return `
+                <div class="pair-section">
+                    <div class="pair-header">
+                        <span class="pair-icon">
+                            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+                                <path fill-rule="evenodd" d="M2 12a10 10 0 1 1 20 0 10 10 0 0 1-20 0Zm9.406-5.5a1 1 0 1 0 0 2h.124a2.51 2.51 0 0 1 2.378 1.488 2.5 2.5 0 1 1 2.766 4.673A2.5 2.5 0 0 1 15 17.5a2.5 2.5 0 0 1-4.99-.21l-.01.21a2.5 2.5 0 0 1-4.707-.417 1 1 0 0 0-1.85.834A4.5 4.5 0 0 0 8 17.5a4.5 4.5 0 0 0 4.29-3.417 4.51 4.51 0 0 0-3.384-5.385 1 1 0 0 0 1.5-1.698Z" clip-rule="evenodd"/>
+                            </svg>
+                        </span>
+                        <span class="pair-name">${s.pair}</span>
+                        <span class="icon-wrap">
+                            <span class="icon-label">${s.signals_count}</span>
+                            <span class="icon">⚙️</span>
+                        </span>
+                    </div>
+                    <div class="summary-info">
+                        Суммарная комиссия: <span class="commission-value">${(s.total_commission || 0).toFixed(3)}%</span>
+                        <div class="spread-info">
+                            <span>Спред фандинга: <span class="${s.funding_spread !== null ? (s.funding_spread >= 0 ? 'green' : 'red') : ''}">${s.funding_spread !== null ? s.funding_spread.toFixed(4) + '%' : 'N/A'}</span></span>
+                            <span>Спред входа: <span class="${(s.entry_spread || 0) >= 0 ? 'green' : 'red'}">${(s.entry_spread || 0).toFixed(3)}%</span></span>
+                            <span>Спред выхода: <span class="${(s.exit_spread || 0) >= 0 ? 'green' : 'red'}">${(s.exit_spread || 0).toFixed(3)}%</span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-container">
+                    <div class="panel left-panel">
+                        <div class="panel-header">
+                            <span class="panel-icon-text">↓ S</span> ${s.ex_a.toUpperCase()} фьюч. <span class="panel-icon">🗗</span>
+                        </div>
+                        <div class="panel-data">
+                            <div class="data-row">Bid: <span class="data-value">${(s.bid_a || 0).toFixed(8)}</span></div>
+                            <div class="data-row">Ask: <span class="data-value">${(s.ask_a || 0).toFixed(8)}</span></div>
+                            <div class="data-row">Фандинг: <span class="data-value ${s.funding_a !== null ? (s.funding_a >= 0 ? 'green' : 'red') : ''}">${formatFunding(s.funding_a)}</span></div>
+                            <div class="data-row">Время: <span class="data-value">${fundingTimeStr}</span></div>
+                            <div class="data-row">Объем: <span class="data-value">${((s.vol_a || 0) / 1000000).toFixed(2)}M</span></div>
+                        </div>
+                    </div>
+                    <div class="panel right-panel">
+                        <div class="panel-header">
+                            <span class="panel-icon-text">↑ L</span> ${s.ex_b.toUpperCase()} фьюч. <span class="panel-icon">🗗</span>
+                        </div>
+                        <div class="panel-data">
+                            <div class="data-row">Bid: <span class="data-value">${(s.bid_b || 0).toFixed(8)}</span></div>
+                            <div class="data-row">Ask: <span class="data-value">${(s.ask_b || 0).toFixed(8)}</span></div>
+                            <div class="data-row">Фандинг: <span class="data-value ${s.funding_b !== null ? (s.funding_b >= 0 ? 'green' : 'red') : ''}">${formatFunding(s.funding_b)}</span></div>
+                            <div class="data-row">Время: <span class="data-value">${fundingTimeStr}</span></div>
+                            <div class="data-row">Объем: <span class="data-value">${((s.vol_b || 0) / 1000000).toFixed(2)}M</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chart-section">
+                    <div class="status">Статус: <span class="online">Онлайн</span></div>
+                    <div class="chart-placeholder">
+                        <canvas id="spreadChart"></canvas>
+                    </div>
+                    <div class="chart-values">
+                        <div class="value-item exit">Выход <span class="value-number">${(s.exit_spread || 0).toFixed(2)}%</span></div>
+                        <div class="value-item entry">Вход <span class="value-number">${(s.entry_spread || 0).toFixed(2)}%</span></div>
+                        <div class="value-item your-entry">Ваш. вх. <span class="value-number">${(s.spread || 0).toFixed(3)}%</span></div>
+                    </div>
+                </div>
+
+                <footer class="main-footer">
+                    <div class="spread-history-title">${s.pair} - История спредов</div>
+                    <div class="spread-history-subtitle">Биржи: ${s.ex_a.toUpperCase()} и ${s.ex_b.toUpperCase()}</div>
+                    <div class="period-selector">
+                        Период: <span>3 дня</span> <span class="nav-icon">⬇️</span>
+                    </div>
+                </footer>
+            `;
         }
 
         function initializeChart(signal) {
             const ctx = document.getElementById('spreadChart');
             if (!ctx) return;
+            // Инициализируем график с пустыми данными, которые будут заполняться
+            // при обновлении
             const labels = Array(10).fill('');
             const data = Array(10).fill(null);
 
@@ -636,195 +803,14 @@
                     }
                 }
             });
+
             updateDynamicContent(signal);
         }
 
-        function formatFunding(funding) {
-            return funding !== null ? funding.toFixed(4) + '%' : 'N/A';
-        }
-
-        function formatTime(next_funding) {
-            if (!next_funding) return 'N/A';
-            const nextFundingMs = next_funding;
-            const nowMs = new Date().getTime();
-            const minutesLeft = Math.floor((nextFundingMs - nowMs) / 60000);
-            if (minutesLeft > 0) {
-                return `через ${minutesLeft} мин`;
-            } else {
-                return 'скоро';
-            }
-        }
-
-        function formatVolume(volume) {
-            if (volume === null || volume === undefined) return 'N/A';
-            const billion = 1000000000;
-            const million = 1000000;
-            const thousand = 1000;
-
-            if (volume >= billion) {
-                return (volume / billion).toFixed(2) + 'B';
-            } else if (volume >= million) {
-                return (volume / million).toFixed(2) + 'M';
-            } else if (volume >= thousand) {
-                return (volume / thousand).toFixed(2) + 'K';
-            }
-            return volume.toFixed(2);
-        }
-
-        function generateMainScreenContent(s) {
-            const fundingTimeStr = formatTime(s.funding_times);
-            return `
-                <div class="pair-section card">
-                    <div class="pair-header">
-                        <span class="pair-icon">
-                            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
-                                <path fill-rule="evenodd" d="M2 12a10 10 0 1 1 20 0 10 10 0 0 1-20 0Zm9.406-5.5a1 1 0 1 0 0 2h.124a2.51 2.51 0 0 1 2.378 1.488 2.5 2.5 0 1 1 2.766 4.673A2.5 2.5 0 0 1 15 17.5a2.5 2.5 0 0 1-4.99-.21l-.01.21a2.5 2.5 0 0 1-4.707-.417 1 1 0 0 0-1.85.834A4.5 4.5 0 0 0 8 17.5a4.5 4.5 0 0 0 4.29-3.417 4.51 4.51 0 0 0-3.384-5.385 1 1 0 0 0 1.5-1.698Z" clip-rule="evenodd"/>
-                            </svg>
-                        </span>
-                        <span class="pair-name">${s.base}</span>
-                        <span class="icon-wrap">
-                            <span class="icon-label">1</span>
-                            <span class="icon">⚙️</span>
-                        </span>
-                    </div>
-                    <div class="summary-info">
-                        Суммарная комиссия: <span class="commission-value">${(s.total_commission || 0).toFixed(3)}%</span>
-                        <div class="spread-info">
-                            <span>Спред фандинга: <span id="funding-spread-value" class="${s.funding_spread !== null ? (s.funding_spread >= 0 ? 'green' : 'red') : ''}">${s.funding_spread !== null ? s.funding_spread.toFixed(4) + '%' : 'N/A'}</span></span>
-                            <span>Спред входа: <span class="${(s.entry_spread || 0) >= 0 ? 'green' : 'red'}">${(s.entry_spread || 0).toFixed(3)}%</span></span>
-                            <span>Спред выхода: <span class="${(s.exit_spread || 0) >= 0 ? 'green' : 'red'}">${(s.exit_spread || 0).toFixed(3)}%</span></span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="panel-container">
-                    <div class="panel left-panel">
-                        <div class="panel-header">
-                            <span class="panel-icon-text">↓ S</span> ${s.exchange_a.toUpperCase()} фьюч. <span class="panel-icon">🗗</span>
-                        </div>
-                        <div class="panel-data">
-                            <div class="data-row">Bid: <span class="data-value">${(s.bid_a || 0).toFixed(8)}</span></div>
-                            <div class="data-row">Ask: <span class="data-value">${(s.ask_a || 0).toFixed(8)}</span></div>
-                            <div class="data-row">Время фанд.: <span class="data-value">${fundingTimeStr}</span></div>
-                            <div class="data-row">Процент фандинга: <span class="data-value ${s.funding_a_pct !== null ? (s.funding_a_pct >= 0 ? 'green' : 'red') : ''}">${formatFunding(s.funding_a_pct)}</span></div>
-                            <div class="data-row">Объем USDT 24Ч: <span class="data-value">${formatVolume(s.volume_a)}</span></div>
-                        </div>
-                    </div>
-                    <div class="panel right-panel">
-                        <div class="panel-header">
-                            <span class="panel-icon-text">↑ L</span> ${s.exchange_b.toUpperCase()} фьюч. <span class="panel-icon">🗗</span>
-                        </div>
-                        <div class="panel-data">
-                            <div class="data-row">Bid: <span class="data-value">${(s.bid_b || 0).toFixed(8)}</span></div>
-                            <div class="data-row">Ask: <span class="data-value">${(s.ask_b || 0).toFixed(8)}</span></div>
-                            <div class="data-row">Время фанд.: <span class="data-value">${fundingTimeStr}</span></div>
-                            <div class="data-row">Процент фандинга: <span class="data-value ${s.funding_b_pct !== null ? (s.funding_b_pct >= 0 ? 'green' : 'red') : ''}">${formatFunding(s.funding_b_pct)}</span></div>
-                            <div class="data-row">Объем USDT 24Ч: <span class="data-value">${formatVolume(s.volume_b)}</span></div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="chart-section">
-                    <div class="status">Статус: <span class="online">Онлайн</span></div>
-                    <div class="chart-placeholder">
-                        <canvas id="spreadChart"></canvas>
-                    </div>
-                    <div class="chart-values">
-                        <div class="value-item exit">Выход <span class="value-number">${(s.exit_spread || 0).toFixed(2)}%</span></div>
-                        <div class="value-item entry">Вход <span class="value-number">${(s.entry_spread || 0).toFixed(2)}%</span></div>
-                        <div class="value-item your-entry">Ваш. вх. <span class="value-number">${(s.spread || 0).toFixed(3)}%</span></div>
-                    </div>
-                </div>
-            `;
-        }
-
-        function renderSignalList(signals) {
-            const signalList = document.getElementById('signal-list');
-            signalList.innerHTML = '';
-            signals.forEach(s => {
-                const fundingTimeStr = formatTime(s.funding_times);
-
-                const signalItem = document.createElement('div');
-                signalItem.className = 'signal-item card';
-                signalItem.dataset.pair = s.base;
-                signalItem.innerHTML = `
-                    <div class="pair-section" style="padding: 0; margin-bottom: 0; background: none;">
-                        <div class="pair-header" style="margin-bottom: 5px;">
-                            <span class="pair-icon">
-                                <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
-                                    <path fill-rule="evenodd" d="M2 12a10 10 0 1 1 20 0 10 10 0 0 1-20 0Zm9.406-5.5a1 1 0 1 0 0 2h.124a2.51 2.51 0 0 1 2.378 1.488 2.5 2.5 0 1 1 2.766 4.673A2.5 2.5 0 0 1 15 17.5a2.5 2.5 0 0 1-4.99-.21l-.01.21a2.5 2.5 0 0 1-4.707-.417 1 1 0 0 0-1.85.834A4.5 4.5 0 0 0 8 17.5a4.5 4.5 0 0 0 4.29-3.417 4.51 4.51 0 0 0-3.384-5.385 1 1 0 0 0 1.5-1.698Z" clip-rule="evenodd"/>
-                                </svg>
-                            </span>
-                            <span class="pair-name">${s.base}</span>
-                            <span class="icon-wrap">
-                                <span class="icon-label">1</span>
-                                <span class="icon">⚙️</span>
-                            </span>
-                        </div>
-                        <div class="summary-info" style="margin-bottom: 0;">
-                            Суммарная комиссия: <span class="commission-value">${(s.total_commission || 0).toFixed(3)}%</span>
-                            <div class="spread-info">
-                                <span>Спред фандинга: <span class="${s.funding_spread !== null ? (s.funding_spread >= 0 ? 'green' : 'red') : ''}">${s.funding_spread !== null ? s.funding_spread.toFixed(4) + '%' : 'N/A'}</span></span>
-                                <span>Спред входа: <span class="${(s.entry_spread || 0) >= 0 ? 'green' : 'red'}">${(s.entry_spread || 0).toFixed(3)}%</span></span>
-                                <span>Спред выхода: <span class="${(s.exit_spread || 0) >= 0 ? 'green' : 'red'}">${(s.exit_spread || 0).toFixed(3)}%</span></span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="panel-container" style="margin-top: 10px;">
-                        <div class="panel left-panel">
-                            <div class="panel-header">
-                                <span class="panel-icon-text">↓ S</span> ${s.exchange_a.toUpperCase()} фьюч. <span class="panel-icon">🗗</span>
-                            </div>
-                            <div class="panel-data">
-                                <div class="data-row">Bid: <span class="data-value">${(s.bid_a || 0).toFixed(8)}</span></div>
-                                <div class="data-row">Ask: <span class="data-value">${(s.ask_a || 0).toFixed(8)}</span></div>
-                                <div class="data-row">Время фанд.: <span class="data-value">${fundingTimeStr}</span></div>
-                                <div class="data-row">Процент фандинга: <span class="data-value ${s.funding_a_pct !== null ? (s.funding_a_pct >= 0 ? 'green' : 'red') : ''}">${formatFunding(s.funding_a_pct)}</span></div>
-                                <div class="data-row">Объем USDT 24Ч: <span class="data-value">${formatVolume(s.volume_a)}</span></div>
-                            </div>
-                        </div>
-                        <div class="panel right-panel">
-                            <div class="panel-header">
-                                <span class="panel-icon-text">↑ L</span> ${s.exchange_b.toUpperCase()} фьюч. <span class="panel-icon">🗗</span>
-                            </div>
-                            <div class="panel-data">
-                                <div class="data-row">Bid: <span class="data-value">${(s.bid_b || 0).toFixed(8)}</span></div>
-                                <div class="data-row">Ask: <span class="data-value">${(s.ask_b || 0).toFixed(8)}</span></div>
-                                <div class="data-row">Время фанд.: <span class="data-value">${fundingTimeStr}</span></div>
-                                <div class="data-row">Процент фандинга: <span class="data-value ${s.funding_b_pct !== null ? (s.funding_b_pct >= 0 ? 'green' : 'red') : ''}">${formatFunding(s.funding_b_pct)}</span></div>
-                                <div class="data-row">Объем USDT 24Ч: <span class="data-value">${formatVolume(s.volume_b)}</span></div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                signalList.appendChild(signalItem);
-                signalItem.addEventListener('click', () => showScreen('main', s));
-            });
-        }
-
-        async function loadSignals() {
-            const signalList = document.getElementById('signal-list');
-            signalList.innerHTML = '<div id="loading-state">Загрузка сигналов...</div>';
-
-            try {
-                const userId = tg.initDataUnsafe.user.id;
-                const res = await fetch(`/api/signals?user_id=${userId}`);
-                const signals = await res.json();
-                allSignals = signals;
-
-                if (!signals || signals.length === 0) {
-                    signalList.innerHTML = '<div id="loading-state">Сигналов пока нет.</div>';
-                    return;
-                }
-                renderSignalList(signals);
-            } catch(err) {
-                console.error("Ошибка загрузки сигналов:", err);
-                signalList.innerHTML = '<div id="loading-state">Ошибка загрузки сигналов.</div>';
-            }
-        }
+        const getCssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
         document.addEventListener('DOMContentLoaded', () => {
-            showScreen('list');
+            loadSignals();
         });
     </script>
 </body>
