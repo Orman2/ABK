@@ -5,8 +5,6 @@ import sqlite3
 from datetime import datetime, timedelta
 from typing import Dict, Any, List
 import asyncio
-import websockets
-import json
 import ccxt
 import requests
 from fastapi import FastAPI, Request, HTTPException
@@ -27,15 +25,12 @@ WEBHOOK_PATH = f"/webhook/{TELEGRAM_BOT_TOKEN}"
 WEBHOOK_URL = PUBLIC_URL.rstrip("/") + WEBHOOK_PATH
 
 EX_IDS = ["binance", "mexc", "bingx", "gateio", "bybit", "lbank", "kucoin"]
-WS_EX_IDS = ["binance", "mexc", "bingx", "bybit", "gateio"]
-CCXT_EX_IDS = ["lbank", "kucoin"]
-
 QUOTE = "USDT"
 SPREAD_THRESHOLD_MIN = 1.0
 SPREAD_THRESHOLD_MAX = 50.0
 COMMISSION = 0.0005
 DB_FILE = "miniapp.db"
-FETCH_INTERVAL = 1.0
+FETCH_INTERVAL = 3.0
 
 SIGNALS: List[Dict[str, Any]] = []
 SIGNALS_LOCK = threading.Lock()
@@ -149,15 +144,14 @@ def load_futures_markets(ex):
 def fetch_tickers(ex, symbols):
     try:
         return ex.fetch_tickers(symbols)
-    except Exception:
+    except Exception as e:
+        print(f"[{ex.id}] Error fetching tickers: {e}")
         return {}
 
 
 def fetch_market_data(ex, base_map, symbols):
-    prices = {}
     bids = {}
     asks = {}
-    volumes = {}
     funding_rates = {}
     funding_times = {}
 
@@ -169,11 +163,8 @@ def fetch_market_data(ex, base_map, symbols):
         if not t:
             continue
 
-        last = safe_float(t.get("last")) or safe_float(t.get("close"))
         bid = safe_float(t.get("bid"))
         ask = safe_float(t.get("ask"))
-        vol = safe_float(t.get("quoteVolume")) or safe_float(t.get("baseVolume")) or 0
-
         funding_rate = safe_float(t.get("fundingRate"))
         next_funding_time_ms = safe_float(t.get("info", {}).get("nextFundingTime"))
 
@@ -183,14 +174,12 @@ def fetch_market_data(ex, base_map, symbols):
         if next_funding_time_ms is None:
             next_funding_time_ms = next_funding_time().timestamp() * 1000
 
-        prices[base] = last
         bids[base] = bid
         asks[base] = ask
-        volumes[base] = vol
         funding_rates[base] = funding_rate
         funding_times[base] = next_funding_time_ms
 
-    return prices, bids, asks, volumes, funding_rates, funding_times
+    return bids, asks, funding_rates, funding_times
 
 
 def calculate_spreads(signal):
@@ -218,8 +207,8 @@ def calculate_spreads(signal):
 
     return {
         **signal,
-        'funding_a': funding_a_pct,
-        'funding_b': funding_b_pct,
+        'funding_a_pct': funding_a_pct,
+        'funding_b_pct': funding_b_pct,
         'funding_spread': funding_spread,
         'entry_spread': entry_spread,
         'exit_spread': exit_spread,
@@ -227,152 +216,26 @@ def calculate_spreads(signal):
     }
 
 
-# ================= WEBSOCKET FETCHER =================
-EX_DATA = {ex_id: {'bids': {}, 'asks': {}, 'funding_rates': {}, 'funding_times': {}} for ex_id in EX_IDS}
-EX_WS_STATUS = {ex_id: "active" for ex_id in WS_EX_IDS}
-
-
-async def listen_ws(uri, ex_id, subscription_message=None):
-    try:
-        async with websockets.connect(uri) as websocket:
-            print(f"[{ex_id}] Connection successful. Sending subscription message...")
-            if subscription_message:
-                await websocket.send(json.dumps(subscription_message))
-            while True:
-                message = await websocket.recv()
-                data = json.loads(message)
-
-                if ex_id == 'binance':
-                    if isinstance(data, dict):
-                        if data.get('e') == '24hrTicker':
-                            handle_binance_ticker_data(data)
-                        elif data.get('e') == 'fundingRate':
-                            handle_binance_funding_data(data)
-                elif ex_id == 'mexc':
-                    if isinstance(data, dict) and 'channel' in data:
-                        if data['channel'] == 'swap@ticker':
-                            handle_mexc_ticker_data(data['data'])
-                        elif data['channel'] == 'swap@funding_rate':
-                            handle_mexc_funding_data(data['data'])
-                elif ex_id == 'bingx':
-                    if isinstance(data.get('data'), dict) and data.get('dataType') and data['dataType'].startswith(
-                            'ticker'):
-                        for ticker_data in data.get('data', {}).values():
-                            handle_bingx_ticker_data(ticker_data)
-                elif ex_id == 'bybit':
-                    if isinstance(data.get('data'), list) and data.get('topic') and data['topic'].startswith('tickers'):
-                        for ticker_data in data.get('data', []):
-                            handle_bybit_ticker_data(ticker_data)
-                elif ex_id == 'gateio':
-                    if isinstance(data.get('result'), list) and data.get('channel') == 'futures.tickers':
-                        handle_gateio_ticker_data(data.get('result', []))
-    except Exception as e:
-        print(f"[{ex_id}] Error connecting to websocket: {e}. Switching to CCXT for this exchange.")
-        EX_WS_STATUS[ex_id] = "disabled"
-
-
-def handle_binance_ticker_data(data):
-    symbol = data['s'].replace('USDT', '')
-    EX_DATA['binance']['bids'][symbol] = safe_float(data['b'])
-    EX_DATA['binance']['asks'][symbol] = safe_float(data['a'])
-
-
-def handle_binance_funding_data(data):
-    symbol = data['s'].replace('USDT', '')
-    EX_DATA['binance']['funding_rates'][symbol] = safe_float(data['r'])
-    EX_DATA['binance']['funding_times'][symbol] = safe_float(data['T'])
-
-
-def handle_mexc_ticker_data(data):
-    for symbol, ticker_data in data.items():
-        base = symbol.replace('_USDT', '').replace('USDT_', '').replace('USDT', '')
-        if not base: continue
-        EX_DATA['mexc']['bids'][base] = safe_float(ticker_data['bid'])
-        EX_DATA['mexc']['asks'][base] = safe_float(ticker_data['ask'])
-
-
-def handle_mexc_funding_data(data):
-    for symbol, funding_data in data.items():
-        base = symbol.replace('_USDT', '').replace('USDT_', '').replace('USDT', '')
-        if not base: continue
-        EX_DATA['mexc']['funding_rates'][base] = safe_float(funding_data['fundingRate'])
-        EX_DATA['mexc']['funding_times'][base] = safe_float(funding_data['nextFundingTime'])
-
-
-def handle_bingx_ticker_data(data):
-    symbol = data['symbol'].replace('-USDT', '')
-    EX_DATA['bingx']['bids'][symbol] = safe_float(data['bidPrice'])
-    EX_DATA['bingx']['asks'][symbol] = safe_float(data['askPrice'])
-    EX_DATA['bingx']['funding_rates'][symbol] = safe_float(data['fundingRate'])
-    EX_DATA['bingx']['funding_times'][symbol] = safe_float(data['nextFundingTime'])
-
-
-def handle_bybit_ticker_data(data):
-    symbol = data['symbol'].replace('USDT', '')
-    EX_DATA['bybit']['bids'][symbol] = safe_float(data['bidPrice'])
-    EX_DATA['bybit']['asks'][symbol] = safe_float(data['askPrice'])
-    EX_DATA['bybit']['funding_rates'][symbol] = safe_float(data['fundingRate'])
-    EX_DATA['bybit']['funding_times'][symbol] = safe_float(data['nextFundingFeeTime'])
-
-
-def handle_gateio_ticker_data(data_list):
-    for ticker_data in data_list:
-        symbol = ticker_data['contract'].replace('_USDT', '')
-        EX_DATA['gateio']['bids'][symbol] = safe_float(ticker_data['highest_bid'])
-        EX_DATA['gateio']['asks'][symbol] = safe_float(ticker_data['lowest_ask'])
-        EX_DATA['gateio']['funding_rates'][symbol] = safe_float(ticker_data['funding_rate'])
-        EX_DATA['gateio']['funding_times'][symbol] = safe_float(ticker_data['next_funding_rate_time'])
-
-
+# ================= CCXT FETCHER =================
 async def fetcher_loop():
     exchanges_map = {ex_id: init_exchange(ex_id) for ex_id in EX_IDS}
     markets_info = {ex_id: load_futures_markets(exchanges_map[ex_id]) for ex_id in exchanges_map}
 
-    # Запускаем слушателей веб-сокетов
-    ws_tasks = []
-
-    # Binance
-    ws_tasks.append(asyncio.create_task(listen_ws("wss://fstream.binance.com/ws/!ticker@arr", "binance")))
-    ws_tasks.append(asyncio.create_task(listen_ws("wss://fstream.binance.com/ws/!fundingRate@arr", "binance")))
-
-    # MEXC
-    ws_tasks.append(asyncio.create_task(listen_ws("wss://contract.mexc.com/ws", "mexc", {"method": "subscription",
-                                                                                         "params": ["swap@ticker@all",
-                                                                                                    "swap@funding_rate@all"]})))
-
-    # BingX
-    ws_tasks.append(asyncio.create_task(listen_ws("wss://fstream-ws.bingx.com/ws/V1_ticker", "bingx",
-                                                  {"id": "test", "reqType": "sub", "dataType": "ticker.all"})))
-
-    # Bybit
-    bybit_symbols = [s.replace('USDT', '') for s in markets_info['bybit']['symbols']]
-    bybit_topics = [f"tickers.{s}USDT" for s in bybit_symbols]
-    bybit_ws_uri = "wss://stream.bybit.com/v5/public/linear"
-    bybit_subscription = {"op": "subscribe", "args": bybit_topics}
-    ws_tasks.append(asyncio.create_task(listen_ws(bybit_ws_uri, "bybit", bybit_subscription)))
-
-    # Gate.io
-    gateio_symbols = [s.replace('_USDT', '') for s in markets_info['gateio']['symbols']]
-    gateio_ws_uri = "wss://api.gateio.ws/ws/v4/"
-    gateio_subscription = {"time": int(time.time()), "channel": "futures.tickers", "event": "subscribe",
-                           "payload": [f"USDT_{s}" for s in gateio_symbols]}
-    ws_tasks.append(asyncio.create_task(listen_ws(gateio_ws_uri, "gateio", gateio_subscription)))
-
     while True:
         try:
-            # Сбор данных со всех источников
             all_ex_data = {}
             for ex_id in EX_IDS:
-                if ex_id in WS_EX_IDS and EX_WS_STATUS.get(ex_id) == "active":
-                    # Используем данные с веб-сокета
-                    all_ex_data[ex_id] = EX_DATA.get(ex_id, {})
-                else:
-                    # Используем CCXT в качестве резерва или основного источника
-                    ex = exchanges_map.get(ex_id)
-                    info = markets_info.get(ex_id)
-                    if ex and info:
-                        p, b, a, v, f, t = fetch_market_data(ex, info["base_map"], info["symbols"])
-                        all_ex_data[ex_id] = {'bids': b, 'asks': a, 'funding_rates': f, 'funding_times': t}
+                ex = exchanges_map.get(ex_id)
+                info = markets_info.get(ex_id)
+                if ex and info:
+                    bids, asks, funding_rates, funding_times = fetch_market_data(ex, info["base_map"], info["symbols"])
+                    all_ex_data[ex_id] = {
+                        'bids': bids,
+                        'asks': asks,
+                        'funding_rates': funding_rates,
+                        'funding_times': funding_times
+                    }
+                    print(f"[{ex_id}] Fetched {len(bids)} pairs via CCXT.")
 
             # Логика для поиска арбитражных связок
             found_signals = []
