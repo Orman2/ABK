@@ -4,14 +4,13 @@ import time
 import sqlite3
 from datetime import datetime, timedelta
 from typing import Dict, Any, List
-
+import asyncio
 import ccxt
 import requests
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
@@ -25,13 +24,13 @@ if not TELEGRAM_BOT_TOKEN or not PUBLIC_URL:
 WEBHOOK_PATH = f"/webhook/{TELEGRAM_BOT_TOKEN}"
 WEBHOOK_URL = PUBLIC_URL.rstrip("/") + WEBHOOK_PATH
 
-EX_IDS = ["binance", "gateio", "mexc", "bingx", "lbank"]
+EX_IDS = ["binance", "mexc", "bingx", "gateio", "bybit", "lbank", "kucoin"]
 QUOTE = "USDT"
 SPREAD_THRESHOLD_MIN = 1.0
 SPREAD_THRESHOLD_MAX = 50.0
 COMMISSION = 0.0005
 DB_FILE = "miniapp.db"
-FETCH_INTERVAL = 1.0  # Обновление каждые 1 секунду
+FETCH_INTERVAL = 3.0
 
 SIGNALS: List[Dict[str, Any]] = []
 SIGNALS_LOCK = threading.Lock()
@@ -145,17 +144,17 @@ def load_futures_markets(ex):
 def fetch_tickers(ex, symbols):
     try:
         return ex.fetch_tickers(symbols)
-    except Exception:
+    except Exception as e:
+        print(f"[{ex.id}] Error fetching tickers: {e}")
         return {}
 
 
 def fetch_market_data(ex, base_map, symbols):
-    prices = {}
     bids = {}
     asks = {}
-    volumes = {}
     funding_rates = {}
     funding_times = {}
+    volumes = {}
 
     tickers = fetch_tickers(ex, symbols)
 
@@ -165,38 +164,31 @@ def fetch_market_data(ex, base_map, symbols):
         if not t:
             continue
 
-        last = safe_float(t.get("last")) or safe_float(t.get("close"))
         bid = safe_float(t.get("bid"))
         ask = safe_float(t.get("ask"))
-        vol = safe_float(t.get("quoteVolume")) or safe_float(t.get("baseVolume")) or 0
-
-        # Улучшенная логика для получения данных о фандинге и времени
         funding_rate = safe_float(t.get("fundingRate"))
         next_funding_time_ms = safe_float(t.get("info", {}).get("nextFundingTime"))
+        volume_24h = safe_float(t.get("quoteVolume"))
 
-        # Если данные о фандинге отсутствуют, возвращаем None для дальнейшей обработки
         if funding_rate is None:
             funding_rate = None
 
-        # Если время фандинга не предоставлено, используем нашу универсальную логику
         if next_funding_time_ms is None:
             next_funding_time_ms = next_funding_time().timestamp() * 1000
 
-        prices[base] = last
         bids[base] = bid
         asks[base] = ask
-        volumes[base] = vol
         funding_rates[base] = funding_rate
         funding_times[base] = next_funding_time_ms
+        volumes[base] = volume_24h
 
-    return prices, bids, asks, volumes, funding_rates, funding_times
+    return bids, asks, funding_rates, funding_times, volumes
 
 
 def calculate_spreads(signal):
     funding_a = signal.get('funding_a')
     funding_b = signal.get('funding_b')
 
-    # Обработка случая, когда фандинг отсутствует
     funding_a_pct = funding_a * 100 if funding_a is not None else None
     funding_b_pct = funding_b * 100 if funding_b is not None else None
 
@@ -218,8 +210,8 @@ def calculate_spreads(signal):
 
     return {
         **signal,
-        'funding_a': funding_a_pct,
-        'funding_b': funding_b_pct,
+        'funding_a_pct': funding_a_pct,
+        'funding_b_pct': funding_b_pct,
         'funding_spread': funding_spread,
         'entry_spread': entry_spread,
         'exit_spread': exit_spread,
@@ -227,101 +219,91 @@ def calculate_spreads(signal):
     }
 
 
-# ================= BACKGROUND FETCHER =================
-def fetcher_loop():
-    global SIGNALS
-    print("[fetcher] starting background fetcher")
-    exchanges_map = {}
-    markets_info = {}
-    for ex_id in EX_IDS:
-        ex = init_exchange(ex_id)
-        if ex:
-            exchanges_map[ex_id] = ex
-            markets_info[ex_id] = load_futures_markets(ex)
+# ================= CCXT FETCHER =================
+async def fetcher_loop():
+    exchanges_map = {ex_id: init_exchange(ex_id) for ex_id in EX_IDS}
+    markets_info = {ex_id: load_futures_markets(exchanges_map[ex_id]) for ex_id in exchanges_map}
 
     while True:
         try:
-            local_signals = []
-            prices_cache = {}
-            bids_cache = {}
-            asks_cache = {}
-            volumes_cache = {}
-            funding_rates_cache = {}
-            funding_times_cache = {}
+            all_ex_data = {}
+            for ex_id in EX_IDS:
+                ex = exchanges_map.get(ex_id)
+                info = markets_info.get(ex_id)
+                if ex and info:
+                    bids, asks, funding_rates, funding_times, volumes = fetch_market_data(ex, info["base_map"],
+                                                                                          info["symbols"])
+                    all_ex_data[ex_id] = {
+                        'bids': bids,
+                        'asks': asks,
+                        'funding_rates': funding_rates,
+                        'funding_times': funding_times,
+                        'volumes': volumes
+                    }
+                    print(f"[{ex_id}] Fetched {len(bids)} pairs via CCXT.")
 
-            for ex_id, ex in exchanges_map.items():
-                p, b, a, v, f, t = fetch_market_data(ex, markets_info[ex_id]["base_map"],
-                                                     markets_info[ex_id]["symbols"])
-                prices_cache[ex_id] = p
-                bids_cache[ex_id] = b
-                asks_cache[ex_id] = a
-                volumes_cache[ex_id] = v
-                funding_rates_cache[ex_id] = f
-                funding_times_cache[ex_id] = t
+            found_signals = []
+            unique_signals = set()
+            exchanges_list = list(all_ex_data.keys())
 
-            ex_ids = list(exchanges_map.keys())
-            for i in range(len(ex_ids)):
-                for j in range(i + 1, len(ex_ids)):
-                    a, b = ex_ids[i], ex_ids[j]
-                    commons = set(markets_info[a]["base_map"].keys()) & set(markets_info[b]["base_map"].keys())
-                    for base in commons:
-                        ma = markets_info[a]["base_map"].get(base)
-                        mb = markets_info[b]["base_map"].get(base)
-                        if not ma or not mb: continue
-                        if ma.get("quote") != QUOTE or mb.get("quote") != QUOTE: continue
+            for i in range(len(exchanges_list)):
+                for j in range(i + 1, len(exchanges_list)):
+                    ex_a_id = exchanges_list[i]
+                    ex_b_id = exchanges_list[j]
 
-                        bid_a = bids_cache[a].get(base)
-                        ask_a = asks_cache[a].get(base)
-                        bid_b = bids_cache[b].get(base)
-                        ask_b = asks_cache[b].get(base)
+                    data_a = all_ex_data.get(ex_a_id)
+                    data_b = all_ex_data.get(ex_b_id)
 
-                        vol_a = volumes_cache[a].get(base, 0)
-                        vol_b = volumes_cache[b].get(base, 0)
+                    if not data_a or not data_b: continue
 
-                        funding_a = funding_rates_cache[a].get(base)
-                        funding_b = funding_rates_cache[b].get(base)
+                    common_bases = set(data_a.get('bids', {}).keys()) & set(data_b.get('bids', {}).keys())
 
-                        next_funding_time_ms = funding_times_cache[a].get(base, 0)
+                    for base in common_bases:
+                        pairs_to_check = [
+                            (ex_a_id, ex_b_id, data_a, data_b),
+                            (ex_b_id, ex_a_id, data_b, data_a)
+                        ]
 
-                        # Рассчитываем время фандинга в формате UTC
-                        next_fund = datetime.utcfromtimestamp(
-                            next_funding_time_ms / 1000) if next_funding_time_ms else None
+                        for ex_id1, ex_id2, data1, data2 in pairs_to_check:
+                            key = tuple(sorted((ex_id1, ex_id2))) + (base,)
+                            if key in unique_signals:
+                                continue
 
-                        if not ask_a or not bid_b: continue
+                            ask1 = data1.get('asks', {}).get(base)
+                            bid2 = data2.get('bids', {}).get(base)
 
-                        sp = pct(ask_a, bid_b)
-                        if sp is None: continue
-                        if sp < SPREAD_THRESHOLD_MIN or sp > SPREAD_THRESHOLD_MAX: continue
+                            if ask1 and bid2:
+                                spread = pct(ask1, bid2)
+                                if spread and SPREAD_THRESHOLD_MIN <= spread <= SPREAD_THRESHOLD_MAX:
+                                    signal = {
+                                        'base': base,
+                                        'exchange_a': ex_id1,
+                                        'exchange_b': ex_id2,
+                                        'ask_a': ask1,
+                                        'bid_a': data1.get('bids', {}).get(base),
+                                        'bid_b': bid2,
+                                        'ask_b': data2.get('asks', {}).get(base),
+                                        'spread': spread,
+                                        'direction': f"{ex_id1} -> {ex_id2}",
+                                        'funding_a': data1.get('funding_rates', {}).get(base),
+                                        'funding_b': data2.get('funding_rates', {}).get(base),
+                                        'funding_times': data1.get('funding_times', {}).get(base),
+                                        'volume_a': data1.get('volumes', {}).get(base),
+                                        'volume_b': data2.get('volumes', {}).get(base),
+                                    }
+                                    found_signals.append(calculate_spreads(signal))
+                                    unique_signals.add(key)
 
-                        signal_data = {
-                            "pair": f"{base}/{QUOTE}",
-                            "ex_a": a,
-                            "ex_b": b,
-                            "bid_a": bid_a,
-                            "ask_a": ask_a,
-                            "bid_b": bid_b,
-                            "ask_b": ask_b,
-                            "vol_a": vol_a,
-                            "vol_b": vol_b,
-                            "funding_a": funding_a,
-                            "funding_b": funding_b,
-                            "spread": sp,
-                            "next_funding": next_fund.isoformat() if next_fund else None
-                        }
-
-                        full_signal = calculate_spreads(signal_data)
-                        local_signals.append(full_signal)
-
-            local_signals.sort(key=lambda x: -x["spread"])
             with SIGNALS_LOCK:
-                SIGNALS = local_signals[:200]
-            if SIGNALS:
-                print(f"[fetcher] {len(SIGNALS)} signals; top: {SIGNALS[0]['pair']} {SIGNALS[0]['spread']:.2f}%")
-            else:
-                print("[fetcher] no signals found")
+                SIGNALS.clear()
+                SIGNALS.extend(sorted(found_signals, key=lambda x: x['spread'], reverse=True))
+
+            print(f"Total signals found: {len(SIGNALS)}")
+
         except Exception as e:
-            print("[fetcher] error:", e)
-        time.sleep(FETCH_INTERVAL)
+            print(f"[fetcher] error: {e}")
+
+        await asyncio.sleep(FETCH_INTERVAL)
 
 
 # ================= TELEGRAM BOT =================
@@ -376,6 +358,27 @@ async def api_signals(request: Request):
     return JSONResponse(out)
 
 
+@app.get("/api/ohlcv")
+async def api_ohlcv(request: Request):
+    exchange_id = request.query_params.get("exchange")
+    base = request.query_params.get("base")
+    timeframe = request.query_params.get("timeframe", "1m")
+
+    if not exchange_id or not base:
+        raise HTTPException(status_code=400, detail="Missing exchange or base symbol.")
+
+    ex = init_exchange(exchange_id)
+    if not ex:
+        raise HTTPException(status_code=404, detail="Exchange not found.")
+
+    symbol = f"{base}/USDT:USDT"
+    try:
+        ohlcv = ex.fetch_ohlcv(symbol, timeframe)
+        return JSONResponse(ohlcv)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "signals": len(SIGNALS)}
@@ -403,7 +406,7 @@ async def startup_event():
     TELE_BOT_APP.add_handler(CommandHandler("wallet", cmd_wallet))
     TELE_BOT_APP.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), wallet_text_handler))
 
-    threading.Thread(target=fetcher_loop, daemon=True).start()
+    asyncio.create_task(fetcher_loop())
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setWebhook"
     secret_token = os.environ.get("TELEGRAM_WEBHOOK_SECRET")
