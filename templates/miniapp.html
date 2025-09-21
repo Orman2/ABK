@@ -361,7 +361,7 @@
                 if (data.spreads && data.spreads.length > 0) {
                     renderSpreadList(data.spreads);
                 } else {
-                    listElement.innerHTML = '<div style="padding:20px;text-align:center;">Актуальных связок пока нет.</div>';
+                    listElement.innerHTML = '<div style="padding:20px;text-align:center;">Актуальных связок пока нет. Проверьте настройки.</div>';
                 }
             } catch (error) {
                 console.error('Ошибка загрузки связок:', error);
@@ -388,34 +388,39 @@
                 group.className = 'coin-group';
 
                 // Создание заголовка группы
+                const highestSpread = Math.max(...groupedSpreads[coin].map(s => s.net_spread));
+
                 let html = `
                     <div class="coin-header">
                         <span class="name">💰 ${coin}</span>
                         <span>
-                            Спред входа: <span class="green">${groupedSpreads[coin][0].net_spread}%</span>
+                            Спред входа: <span class="green">${highestSpread.toFixed(4)}%</span>
                         </span>
                     </div>
                 `;
 
                 // Отображение каждой связки в группе
                 groupedSpreads[coin].forEach(s => {
-                    // Используем классы long/short для цветовой индикации
                     const statusColor = s.status.includes('🟢') ? 'green' : 'yellow';
 
                     html += `
                         <div class="exchange-pair" onclick="showScreen('info', '${s.coin}')">
                             <div class="exchange-card long">
-                                <div class="exchange-name">⬇️S ${s.long_exchange} Фьюч</div>
+                                <div class="exchange-name">📈 LONG ${s.long_exchange}</div>
                                 <div>Bid: <span class="green">${s.bid_long.toFixed(5)}</span></div>
-                                <div>Ask: ${s.ask_long.toFixed(5)}</div>
+                                <div>Ask: ${s.ask_short.toFixed(5)}</div>
                                 <div>Фандинг: <span class="${s.funding_long > 0 ? 'red' : 'green'}">${s.funding_long.toFixed(4)}%</span></div>
                             </div>
                             <div class="exchange-card short">
-                                <div class="exchange-name">⬆️L ${s.short_exchange} Спот</div>
-                                <div>Bid: ${s.bid_short.toFixed(5)}</div>
-                                <div>Ask: <span class="green">${s.ask_short.toFixed(5)}</span></div>
-                                <div>Объем USDT 24Ч: ${s.volume_short}</div>
+                                <div class="exchange-name">📉 SHORT ${s.short_exchange}</div>
+                                <div>Bid: ${s.bid_long.toFixed(5)}</div>
+                                <div>Ask: <span class="red">${s.ask_short.toFixed(5)}</span></div>
+                                <div>Фандинг: <span class="${s.funding_short > 0 ? 'red' : 'green'}">${s.funding_short.toFixed(4)}%</span></div>
                             </div>
+                        </div>
+                        <div class="spread-summary" style="margin-top: 5px; font-size: 13px;">
+                            Чистый спред: <span class="${statusColor}">${s.net_spread.toFixed(4)}%</span> |
+                            Грубый спред: <span class="yellow">${s.gross_spread.toFixed(4)}%</span>
                         </div>
                     `;
                 });
@@ -478,7 +483,7 @@
             const settingsPayload = {
                 user_id: parseInt(userId),
                 exchanges: selectedExchanges,
-                blacklist: [blacklistText], // Отправляем как массив, чтобы обработать на бэкенде
+                blacklist: [blacklistText],
                 min_spread: parseFloat(document.getElementById('min-spread-input').value) || 3.0,
                 min_funding_spread: parseFloat(document.getElementById('min-funding-spread-input').value) || 1.5,
                 // Здесь можно добавить настройки частоты и включения уведомлений

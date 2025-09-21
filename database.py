@@ -26,9 +26,8 @@ def save_settings(user_id: int, settings: Dict[str, Any]):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
-    # Преобразование списков в строку для хранения (например, 'Binance,Bybit')
     exchanges_str = ",".join(settings.get('exchanges', []))
-    blacklist_str = ",".join(settings.get('blacklist', []))
+    blacklist_str = " ".join(settings.get('blacklist', []))  # Пробел как разделитель
 
     cursor.execute('''
         INSERT OR REPLACE INTO user_settings 
@@ -47,7 +46,7 @@ def save_settings(user_id: int, settings: Dict[str, Any]):
 
 def get_settings(user_id: int) -> Dict[str, Any]:
     """Загружает настройки пользователя или возвращает дефолтные."""
-    create_db()  # Убедимся, что база данных существует
+    create_db()
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute('SELECT * FROM user_settings WHERE user_id = ?', (user_id,))
@@ -56,7 +55,7 @@ def get_settings(user_id: int) -> Dict[str, Any]:
 
     default_settings = {
         'user_id': user_id,
-        'exchanges': [],
+        'exchanges': ['BINANCE', 'BYBIT', 'MEXC'],  # Дефолтные активные биржи
         'blacklist': [],
         'min_spread': 3.0,
         'min_funding_spread': 1.5
@@ -67,14 +66,8 @@ def get_settings(user_id: int) -> Dict[str, Any]:
         return {
             'user_id': row[0],
             'exchanges': row[1].split(',') if row[1] else [],
-            'blacklist': row[2].split(',') if row[2] else [],
+            'blacklist': row[2].upper().split() if row[2] else [],  # Обработка пробелов
             'min_spread': row[3],
             'min_funding_spread': row[4]
         }
     return default_settings
-
-
-if __name__ == '__main__':
-    # Пример использования:
-    create_db()
-    print("База данных готова.")
