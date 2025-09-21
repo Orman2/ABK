@@ -1,25 +1,18 @@
 import os
 import threading
 import time
-import logging
-from typing import Dict, Any, List, Optional
-from datetime import datetime
+import sqlite3
+from datetime import datetime, timedelta
+from typing import Dict, Any, List
+import asyncio
 import ccxt
 import requests
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Update, Message
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, ExtBot
-from pydantic import BaseModel
-import asyncio
-
-# ==================== ИМПОРТ НОВЫХ МОДУЛЕЙ ====================
-# ! ВАЖНО: Убедитесь, что эти файлы находятся в той же директории
-from arb_analyzer import ArbAnalyzer, GLOBAL_ARB_DATA
-from database import get_settings, create_db, save_settings
-
-# =============================================================
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Update
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 # ================= CONFIG =================
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -30,143 +23,374 @@ if not TELEGRAM_BOT_TOKEN or not PUBLIC_URL:
 
 WEBHOOK_PATH = f"/webhook/{TELEGRAM_BOT_TOKEN}"
 WEBHOOK_URL = PUBLIC_URL.rstrip("/") + WEBHOOK_PATH
-WEBAPP_BASE_URL = PUBLIC_URL.rstrip("/") + "/webapp"
+
+EX_IDS = ["binance", "mexc", "bingx", "gateio", "bybit", "lbank", "kucoin"]
+QUOTE = "USDT"
+SPREAD_THRESHOLD_MIN = 1.0
+SPREAD_THRESHOLD_MAX = 50.0
+COMMISSION = 0.0005
+DB_FILE = "miniapp.db"
 FETCH_INTERVAL = 3.0
-PORT = int(os.environ.get('PORT', 8080))
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+SIGNALS: List[Dict[str, Any]] = []
+SIGNALS_LOCK = threading.Lock()
 
-# ==================== FASTAPI & TELEGRAM INIT ====================
+# ================= FASTAPI =================
 app = FastAPI()
+templates = Jinja2Templates(directory="templates")
+if os.path.isdir("static"):
+    app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
-class CustomBot(ExtBot):
-    pass
+# ================= DATABASE =================
+def init_db():
+    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+    cur = conn.cursor()
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        user_id INTEGER PRIMARY KEY,
+        wallet REAL
+    )""")
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS tracking (
+        user_id INTEGER,
+        exchange TEXT,
+        funding_time TEXT,
+        PRIMARY KEY (user_id, exchange)
+    )""")
+    conn.commit()
+    return conn
 
 
-TELE_BOT_APP = (
-    Application.builder()
-    .token(TELEGRAM_BOT_TOKEN)
-    .updater(None)
-    .bot(CustomBot)  # ИСПРАВЛЕНО
-    .build()
-)
-
-templates = Jinja2Templates(directory=".")
-
-arb_thread: Optional[ArbAnalyzer] = None
+DB_CONN = init_db()
+DB_LOCK = threading.Lock()
 
 
-# ==================== СХЕМЫ ДАННЫХ ДЛЯ API ====================
-class SettingsData(BaseModel):
-    user_id: int
-    exchanges: List[str]
-    blacklist: List[str]
-    min_spread: float
-    min_funding_spread: float
+def set_wallet(user_id: int, amount: float):
+    with DB_LOCK:
+        cur = DB_CONN.cursor()
+        cur.execute("INSERT OR REPLACE INTO users (user_id, wallet) VALUES (?, ?)", (user_id, amount))
+        DB_CONN.commit()
 
 
-# ==================== TELEGRAM HANDLERS ====================
+def get_wallet(user_id: int):
+    with DB_LOCK:
+        cur = DB_CONN.cursor()
+        cur.execute("SELECT wallet FROM users WHERE user_id=?", (user_id,))
+        row = cur.fetchone()
+        return row[0] if row else None
 
-async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not update.message or not update.message.from_user:
-        return
 
+# ================= HELPERS =================
+def safe_float(x):
+    try:
+        return float(x) if x is not None else None
+    except:
+        return None
+
+
+def pct(a, b):
+    try:
+        lo = min(a, b)
+        if lo <= 0:
+            return None
+        return abs(a - b) / lo * 100.0
+    except:
+        return None
+
+
+def next_funding_time():
+    now = datetime.utcnow()
+    hours = [0, 8, 16]
+    for h in hours:
+        t = now.replace(hour=h, minute=0, second=0, microsecond=0)
+        if t > now:
+            return t
+    return (now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1))
+
+
+def init_exchange(ex_id: str):
+    try:
+        cls = getattr(ccxt, ex_id)
+        ex = cls({"enableRateLimit": True, "options": {"defaultType": "swap"}})
+        try:
+            ex.load_markets()
+        except Exception:
+            pass
+        return ex
+    except Exception:
+        return None
+
+
+def load_futures_markets(ex):
+    base_map = {}
+    symbols = []
+    try:
+        markets = ex.load_markets()
+    except Exception:
+        return {"base_map": {}, "symbols": []}
+    for m in markets.values():
+        if not m.get("swap") or m.get("quote") != QUOTE or not m.get("active"):
+            continue
+        base = (m.get("base") or "").upper()
+        symbol = m.get("symbol")
+        if base and symbol:
+            symbols.append(symbol)
+            if base not in base_map:
+                base_map[base] = m
+    return {"base_map": base_map, "symbols": symbols}
+
+
+def fetch_tickers(ex, symbols):
+    try:
+        return ex.fetch_tickers(symbols)
+    except Exception as e:
+        print(f"[{ex.id}] Error fetching tickers: {e}")
+        return {}
+
+
+def fetch_market_data(ex, base_map, symbols):
+    bids = {}
+    asks = {}
+    funding_rates = {}
+    funding_times = {}
+    volumes = {}
+
+    tickers = fetch_tickers(ex, symbols)
+
+    for base, m in base_map.items():
+        sym = m.get("symbol")
+        t = tickers.get(sym)
+        if not t:
+            continue
+
+        bid = safe_float(t.get("bid"))
+        ask = safe_float(t.get("ask"))
+        funding_rate = safe_float(t.get("fundingRate"))
+        next_funding_time_ms = safe_float(t.get("info", {}).get("nextFundingTime"))
+        volume_24h = safe_float(t.get("quoteVolume"))
+
+        if funding_rate is None:
+            funding_rate = None
+
+        if next_funding_time_ms is None:
+            next_funding_time_ms = next_funding_time().timestamp() * 1000
+
+        bids[base] = bid
+        asks[base] = ask
+        funding_rates[base] = funding_rate
+        funding_times[base] = next_funding_time_ms
+        volumes[base] = volume_24h
+
+    return bids, asks, funding_rates, funding_times, volumes
+
+
+def calculate_spreads(signal):
+    funding_a = signal.get('funding_a')
+    funding_b = signal.get('funding_b')
+
+    funding_a_pct = funding_a * 100 if funding_a is not None else None
+    funding_b_pct = funding_b * 100 if funding_b is not None else None
+
+    price_a = signal.get('ask_a', 0)
+    price_b = signal.get('bid_b', 0)
+
+    if price_a > 0:
+        spread = ((price_b - price_a) / price_a) * 100
+    else:
+        spread = 0
+
+    funding_spread = None
+    if funding_a_pct is not None and funding_b_pct is not None:
+        funding_spread = funding_b_pct - funding_a_pct
+
+    entry_spread = spread - (COMMISSION * 2 * 100)
+    exit_spread = spread * 0.9 - (COMMISSION * 2 * 100)
+    total_commission = COMMISSION * 2 * 100
+
+    return {
+        **signal,
+        'funding_a_pct': funding_a_pct,
+        'funding_b_pct': funding_b_pct,
+        'funding_spread': funding_spread,
+        'entry_spread': entry_spread,
+        'exit_spread': exit_spread,
+        'total_commission': total_commission
+    }
+
+
+# ================= CCXT FETCHER =================
+async def fetcher_loop():
+    exchanges_map = {ex_id: init_exchange(ex_id) for ex_id in EX_IDS}
+    markets_info = {ex_id: load_futures_markets(exchanges_map[ex_id]) for ex_id in exchanges_map}
+
+    while True:
+        try:
+            all_ex_data = {}
+            for ex_id in EX_IDS:
+                ex = exchanges_map.get(ex_id)
+                info = markets_info.get(ex_id)
+                if ex and info:
+                    bids, asks, funding_rates, funding_times, volumes = fetch_market_data(ex, info["base_map"],
+                                                                                          info["symbols"])
+                    all_ex_data[ex_id] = {
+                        'bids': bids,
+                        'asks': asks,
+                        'funding_rates': funding_rates,
+                        'funding_times': funding_times,
+                        'volumes': volumes
+                    }
+                    print(f"[{ex_id}] Fetched {len(bids)} pairs via CCXT.")
+
+            found_signals = []
+            unique_signals = set()
+            exchanges_list = list(all_ex_data.keys())
+
+            for i in range(len(exchanges_list)):
+                for j in range(i + 1, len(exchanges_list)):
+                    ex_a_id = exchanges_list[i]
+                    ex_b_id = exchanges_list[j]
+
+                    data_a = all_ex_data.get(ex_a_id)
+                    data_b = all_ex_data.get(ex_b_id)
+
+                    if not data_a or not data_b: continue
+
+                    common_bases = set(data_a.get('bids', {}).keys()) & set(data_b.get('bids', {}).keys())
+
+                    for base in common_bases:
+                        pairs_to_check = [
+                            (ex_a_id, ex_b_id, data_a, data_b),
+                            (ex_b_id, ex_a_id, data_b, data_a)
+                        ]
+
+                        for ex_id1, ex_id2, data1, data2 in pairs_to_check:
+                            key = tuple(sorted((ex_id1, ex_id2))) + (base,)
+                            if key in unique_signals:
+                                continue
+
+                            ask1 = data1.get('asks', {}).get(base)
+                            bid2 = data2.get('bids', {}).get(base)
+
+                            if ask1 and bid2:
+                                spread = pct(ask1, bid2)
+                                if spread and SPREAD_THRESHOLD_MIN <= spread <= SPREAD_THRESHOLD_MAX:
+                                    signal = {
+                                        'base': base,
+                                        'exchange_a': ex_id1,
+                                        'exchange_b': ex_id2,
+                                        'ask_a': ask1,
+                                        'bid_a': data1.get('bids', {}).get(base),
+                                        'bid_b': bid2,
+                                        'ask_b': data2.get('asks', {}).get(base),
+                                        'spread': spread,
+                                        'direction': f"{ex_id1} -> {ex_id2}",
+                                        'funding_a': data1.get('funding_rates', {}).get(base),
+                                        'funding_b': data2.get('funding_rates', {}).get(base),
+                                        'funding_times': data1.get('funding_times', {}).get(base),
+                                        'volume_a': data1.get('volumes', {}).get(base),
+                                        'volume_b': data2.get('volumes', {}).get(base),
+                                    }
+                                    found_signals.append(calculate_spreads(signal))
+                                    unique_signals.add(key)
+
+            with SIGNALS_LOCK:
+                SIGNALS.clear()
+                SIGNALS.extend(sorted(found_signals, key=lambda x: x['spread'], reverse=True))
+
+            print(f"Total signals found: {len(SIGNALS)}")
+
+        except Exception as e:
+            print(f"[fetcher] error: {e}")
+
+        await asyncio.sleep(FETCH_INTERVAL)
+
+
+# ================= TELEGRAM BOT =================
+TELE_BOT_APP = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+
+
+async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    url = PUBLIC_URL.rstrip("/") + "/miniapp"
+    kb = [[InlineKeyboardButton("📊 Open MiniApp", web_app=WebAppInfo(url=url))]]
+    await update.message.reply_text("👋 Здравствуйте!"
+
+                                    " Arb-bot - арбитражный бот, который показывает спред и готовые связки для арбитража фьючерсов, курсового спреда и фандинга..",
+                                    reply_markup=InlineKeyboardMarkup(kb))
+
+
+async def cmd_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("💰 Send the wallet amount in USD. Example: `200`", parse_mode="Markdown")
+
+
+async def wallet_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
-
-    # URL для открытия Web App (miniapp.html)
-    webapp_url = f"{WEBAPP_BASE_URL}?user_id={user_id}"
-
-    keyboard = [
-        [InlineKeyboardButton("📊 Открыть Арбитраж Радар", web_app=WebAppInfo(url=webapp_url))]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    await update.message.reply_text(
-        "👋 Добро пожаловать!\n\nИспользуйте кнопку ниже, чтобы открыть арбитражный радар.",
-        reply_markup=reply_markup
-    )
+    txt = update.message.text.strip()
+    try:
+        val = float(txt)
+        set_wallet(user_id, val)
+        await update.message.reply_text(f"✅ Wallet set to ${val:.2f}")
+    except Exception:
+        await update.message.reply_text("❌ Could not parse amount. Send a number, e.g. `200`", parse_mode="Markdown")
 
 
-async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message:
-        await update.message.reply_text(update.message.text)
-
-
-# ==================== WEB APP (HTML) ENDPOINTS ====================
-
-@app.get("/webapp", response_class=HTMLResponse)
-async def webapp_html(request: Request):
+# ================= FASTAPI ROUTES =================
+@app.get("/miniapp", response_class=HTMLResponse)
+async def miniapp(request: Request):
     return templates.TemplateResponse("miniapp.html", {"request": request})
 
 
-# ==================== API ENDPOINTS (Для JS в Web App) ====================
-
-# 1. API для получения актуальных арбитражных связок
-@app.get("/api/get_arb_data", response_class=JSONResponse)
-async def api_get_arb_data(user_id: int):
-    """Возвращает актуальный список связок с учетом фильтров пользователя."""
-
-    settings = get_settings(user_id)
-    all_spreads = GLOBAL_ARB_DATA.get('latest_spreads', [])
-
-    filtered_spreads = []
-
-    for s in all_spreads:
-        # Фильтр по минимальному спреду
-        if s['net_spread'] * 100 < settings['min_spread']:
-            continue
-
-        # Фильтр по черному списку монет
-        if s['coin'] in settings['blacklist']:
-            continue
-
-        # Фильтр по выбранным биржам (упрощенный, нужен хотя бы один)
-        is_exchange_ok = not settings['exchanges'] or \
-                         s['long_exchange'] in settings['exchanges'] or \
-                         s['short_exchange'] in settings['exchanges']
-
-        if is_exchange_ok:
-            filtered_spreads.append(s)
-
-    return {"spreads": filtered_spreads}
+@app.get("/api/signals")
+async def api_signals(request: Request):
+    limit = int(request.query_params.get("limit", "50"))
+    user_id = request.query_params.get("user_id")
+    wallet = get_wallet(int(user_id)) if user_id else None
+    out = []
+    with SIGNALS_LOCK:
+        arr = SIGNALS[:limit]
+    for s in arr:
+        est = None
+        if wallet:
+            est = (s.get("spread", 0) / 100) * wallet
+        o = dict(s)
+        o["estimated_earn"] = est
+        out.append(o)
+    return JSONResponse(out)
 
 
-# 2. API для получения текущих настроек пользователя
-@app.get("/api/get_user_settings/{user_id}", response_class=JSONResponse)
-async def api_get_user_settings(user_id: int):
-    """Возвращает настройки пользователя из БД для заполнения формы в Web App."""
-    settings = get_settings(user_id)
-    return JSONResponse({
-        "settings": settings,
-        "supported_exchanges": ArbAnalyzer.SUPPORTED_EXCHANGES
-    })
+@app.get("/api/ohlcv")
+async def api_ohlcv(request: Request):
+    exchange_id = request.query_params.get("exchange")
+    base = request.query_params.get("base")
+    timeframe = request.query_params.get("timeframe", "1m")
 
+    if not exchange_id or not base:
+        raise HTTPException(status_code=400, detail="Missing exchange or base symbol.")
 
-# 3. API для сохранения настроек пользователя (обработка POST из Web App)
-@app.post("/api/save_settings", response_class=JSONResponse)
-async def api_save_user_settings(data: SettingsData):
-    """Сохраняет настройки пользователя, полученные из Web App, в БД."""
+    ex = init_exchange(exchange_id)
+    if not ex:
+        raise HTTPException(status_code=404, detail="Exchange not found.")
+
+    symbol = f"{base}/USDT:USDT"
     try:
-        settings_dict = {
-            "exchanges": data.exchanges,
-            # Обработка ввода монет через пробел
-            "blacklist": data.blacklist[0].upper().split() if data.blacklist and data.blacklist[0] else [],
-            "min_spread": data.min_spread,
-            "min_funding_spread": data.min_funding_spread,
-        }
-
-        save_settings(data.user_id, settings_dict)
-        return {"status": "success", "message": "Настройки успешно сохранены!"}
+        ohlcv = ex.fetch_ohlcv(symbol, timeframe)
+        return JSONResponse(ohlcv)
     except Exception as e:
-        logging.error(f"Ошибка сохранения настроек: {e}")
-        raise HTTPException(status_code=500, detail="Ошибка при сохранении настроек.")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-# ==================== WEBHOOK & STARTUP ====================
+@app.get("/health")
+async def health():
+    return {"status": "ok", "signals": len(SIGNALS)}
 
+
+# ================= TELEGRAM WEBHOOK =================
 @app.post(WEBHOOK_PATH)
 async def telegram_webhook(request: Request):
+    secret_token = os.environ.get("TELEGRAM_WEBHOOK_SECRET")
+    if secret_token and request.headers.get("x-telegram-bot-api-secret-token") != secret_token:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
     data = await request.json()
     update = Update.de_json(data, TELE_BOT_APP.bot)
     await TELE_BOT_APP.process_update(update)
@@ -174,31 +398,31 @@ async def telegram_webhook(request: Request):
     return {"ok": True}
 
 
+# ================= STARTUP =================
 @app.on_event("startup")
 async def startup_event():
-    global arb_thread
-
-    create_db()
-
-    arb_thread = ArbAnalyzer(update_interval=FETCH_INTERVAL)
-    arb_thread.start()
-    logging.info("Арбитражный анализатор запущен.")
-
     await TELE_BOT_APP.initialize()
     TELE_BOT_APP.add_handler(CommandHandler("start", cmd_start))
-    TELE_BOT_APP.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), echo))
+    TELE_BOT_APP.add_handler(CommandHandler("wallet", cmd_wallet))
+    TELE_BOT_APP.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), wallet_text_handler))
 
-    await TELE_BOT_APP.bot.set_webhook(url=WEBHOOK_URL)
-    logging.info(f"Webhook установлен на: {WEBHOOK_URL}")
+    asyncio.create_task(fetcher_loop())
+
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setWebhook"
+    secret_token = os.environ.get("TELEGRAM_WEBHOOK_SECRET")
+    resp = requests.post(
+        url,
+        data={
+            "url": WEBHOOK_URL,
+            "secret_token": secret_token
+        }
+    )
+    print("[telegram] setWebhook:", resp.json())
+    print(f"[app] startup done; fetcher started, webhook registered at {WEBHOOK_URL}")
 
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    await TELE_BOT_APP.bot.delete_webhook()
-    logging.info("Webhook удален.")
+# ================= MAIN =================
+if __name__ == "__main__":
+    import uvicorn
 
-    if arb_thread:
-        # Остановка потока анализатора для чистого завершения
-        arb_thread._stop_event.set()
-        arb_thread.join()
-        logging.info("Арбитражный анализатор остановлен.")
+    uvicorn.run("app:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
